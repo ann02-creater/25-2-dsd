@@ -91,7 +91,7 @@ uart u_uart (
                              // -> simpleuart.v의 cfg_divider를 16비트로 늘리거나
                              //    임시로 10416 상수를 코드 내부에 박아버리는 게 낫습니다.
         .reg_dat_di(tx_data),
-        .reg_dat_do(), // 사용 안 함 (rx_data는 내부 레지스터에서 땀)
+    .reg_dat_do(rx_data), // 사용 안 함 (rx_data는 내부 레지스터에서 땀)
         .reg_dat_we(tx_we),
         .reg_dat_re(rx_re),
         .tx_busy(tx_busy),
