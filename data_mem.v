@@ -18,14 +18,17 @@ module DataMem (
     input             uart_tx_busy   // UART 송신 중 플래그
 );
 
-    reg [7:0] mem [0:4095]; 
+    reg [7:0] mem [0:4095];
 
     initial begin
         led_reg = 0;
         uart_tx_we = 0;
         uart_rx_re = 0;
         // ★★★ Hex 파일 경로 본인 환경에 맞게 수정 필수! ★★★
-        $readmemh("C:/Users/User/Desktop/game.hex", mem); 
+        // 합성 시간 단축: synthesis translate_off/on 지시어로 감쌈
+        // synthesis translate_off
+        $readmemh("C:/Users/User/Desktop/game.hex", mem);
+        // synthesis translate_on
     end
 
     // 쓰기 동작 (Write)
@@ -62,10 +65,10 @@ module DataMem (
         end
     end
 
-    // 읽기 동작 (Read)
+    // 읽기 동작 (Read) - 최적화: parallel_case 힌트 추가
     always @(*) begin
         // 기본값
-        uart_rx_re = 0; 
+        uart_rx_re = 0;
         data_out = 32'b0;
 
         if (MemRead & ~MemWrite) begin
@@ -80,11 +83,15 @@ module DataMem (
             end
             // 3. 일반 메모리 읽기
             else begin
-                if (func3 == 3'b010)      data_out={mem[addr+3],mem[addr+2],mem[addr+1],mem[addr]};
-                else if (func3 == 3'b001) data_out={{16{mem[addr+1][7]}},mem[addr+1],mem[addr]};
-                else if (func3 == 3'b101) data_out= {16'b0,mem[addr],mem[addr+1]};
-                else if (func3 == 3'b100) data_out= {24'b0,mem[addr]};
-                else if (func3 == 3'b000) data_out={{24{mem[addr][7]}},mem[addr]};
+                (* parallel_case, full_case *)
+                case (func3)
+                    3'b010: data_out = {mem[addr+3], mem[addr+2], mem[addr+1], mem[addr]};
+                    3'b001: data_out = {{16{mem[addr+1][7]}}, mem[addr+1], mem[addr]};
+                    3'b101: data_out = {16'b0, mem[addr], mem[addr+1]};
+                    3'b100: data_out = {24'b0, mem[addr]};
+                    3'b000: data_out = {{24{mem[addr][7]}}, mem[addr]};
+                    default: data_out = 32'b0;
+                endcase
             end
         end
     end

@@ -41,7 +41,7 @@ module data_path(
  
     wire neg_clk = ~clk;
 
-    wire [31:0] jump_mux; 
+    wire [31:0] jump_mux;
     wire [31:0] PC;
     wire [31:0] new_PC_in;
     wire [31:0] final_pc;
@@ -65,8 +65,13 @@ module data_path(
     wire [31:0] pc_inc_out;
     wire dummy_carry_2;
     wire [1:0] forwardA, forwardB;
-    wire [31:0] inputA, inputB; 
+    wire [31:0] inputA, inputB;
     wire stall;
+
+    // 메모리 제어 신호를 레지스터로 저장하여 ~clk 조건 제거
+    reg final_mem_read_reg;
+    reg final_mem_write_reg;
+    reg [2:0] final_mem_func_reg;
 
     // ----------------------------------------------------------------------
     // 1. IF/ID Pipeline Register (Stall Logic: Freeze)
@@ -231,21 +236,25 @@ module data_path(
     assign PC_ext = PC;
     assign PC_in_ext = PC_in;
     register#(32) program_counter (neg_clk, final_pc, rst, ~stall, PC); // PC도 Stall일 때 멈춤!
-    
+
+    // ~clk 조건 제거: 레지스터로 메모리 제어 신호 저장
+   // Wire 선언
     wire [31:0] mem_addr;
     wire final_mem_read;
     wire final_mem_write;
     wire [2:0] final_mem_func;
-    
-    assign mem_addr = ~clk ? PC : EX_MEM_ALU_out + 6'd48;
-    assign final_mem_read = ~clk ? 1'b1 : EX_MEM_mem_read;
-    assign final_mem_write = ~clk ? 1'b0 : EX_MEM_mem_write;    
-    assign final_mem_func = ~clk ? 3'b010 : EX_MEM_func;
-    
+
+    // 클럭이 High(1)일 때는 데이터 접근(EX단계), Low(0)일 때는 명령어 가져오기(PC)
+    assign mem_addr = ~clk ? PC : (EX_MEM_ALU_out + 6'd48);
+    assign final_mem_read  = ~clk ? 1'b1 : EX_MEM_mem_read;
+    assign final_mem_write = ~clk ? 1'b0 : EX_MEM_mem_write;
+    assign final_mem_func  = ~clk ? 3'b010 : EX_MEM_func; // 3'b010 = LW (명령어 읽기)
+
     assign inst_out_ext = inst_out;
     wire [31:0] mem_out;
-    wire [31:0] mem_inst_out;
-    
+    reg [31:0] mem_inst_out;
+    reg [31:0] data_mem_out_int;
+
     DataMem inst_mem (
         .clk(clk),
         .MemRead(final_mem_read),
@@ -255,19 +264,26 @@ module data_path(
         .data_in(EX_MEM_RegR2),
         .data_out(mem_out),
         .led_reg(led_reg_out),
-        .led_reg(led_reg_out),
         .uart_tx_data(uart_tx_data_out),
         .uart_tx_we(uart_tx_we_out),
         .uart_rx_re(uart_rx_re_out),
         .uart_rx_data(uart_rx_data_in),
         .uart_rx_valid(uart_rx_valid_in),
         .uart_tx_busy(uart_tx_busy_in)
-
     );
-    
-    // Stall일 때는 명령어 메모리 출력이 의미가 없지만, 굳이 NOP으로 바꿀 필요 없음 (제어신호가 죽었으므로)
-    assign mem_inst_out = ~clk & ~stall ? mem_out : 32'h00_00_00_33; 
-    assign data_mem_out = ~clk ? mem_out : 1'b1;
+
+    // ~clk 조건 제거: 레지스터로 저장
+    always @(negedge clk or posedge rst) begin
+        if (rst) begin
+            mem_inst_out <= 32'h00_00_00_33;
+            data_mem_out_int <= 32'b0;
+        end else begin
+            mem_inst_out <= stall ? 32'h00_00_00_33 : mem_out;
+            data_mem_out_int <= mem_out;
+        end
+    end
+
+    assign data_mem_out = data_mem_out_int;
     
     wire [31:0] decompressed;
     compressed decompressor (mem_inst_out, decompressed);
