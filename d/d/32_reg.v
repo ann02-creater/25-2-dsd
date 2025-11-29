@@ -11,7 +11,7 @@
 * Description: This module just creates one instance of a *register to be used later in the registers file module to create *the 32 registers required for the processor
 *
 * Change history: 09/17/2019 03:07:59 PM - Module created by Abd *El-Salam in the lab
-* 10/24/19 ï¿½ Ahmed, Andrew, Abd El-Salam, and Rinal worked on the *module to make it compatible with the other modules modified in *the sources files
+* 10/24/19 – Ahmed, Andrew, Abd El-Salam, and Rinal worked on the *module to make it compatible with the other modules modified in *the sources files
 * 10/29/19- Ahmed, Andrew, Abd El-Salam, and Rinal made the final modificaions to the module
 *
 **********************************************************************/
