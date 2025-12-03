@@ -28,11 +28,11 @@ module data_path(
     output [31:0]inst_out_ext, output branch_ext, mem_read_ext, mem_to_reg_ext, mem_write_ext, alu_src_ext, reg_write_ext,
     output [1:0]alu_op_ext, output z_flag_ext, output [4:0]alu_ctrl_out_ext, output [31:0]PC_inc_ext, output [31:0]pc_gen_out_ext, output [31:0]PC_ext, output [31:0]PC_in_ext,
     output [31:0]data_read_1_ext, output [31:0]data_read_2_ext, output [31:0]write_data_ext, output [31:0]imm_out_ext, output [31:0]shift_ext, output [31:0]alu_mux_ext,
-    output [31:0]alu_out_ext, output [31:0]data_mem_out_ext, output [15:0] led_reg_out,
+    output [31:0]alu_out_ext, output [31:0]data_mem_out_ext, output reg [15:0] led_reg_out,
 
     output [7:0]  uart_tx_data_out,
-    output        uart_tx_we_out,
-    output        uart_rx_re_out,
+    output reg       uart_tx_we_out,
+    output reg       uart_rx_re_out,
     input  [7:0]  uart_rx_data_in,
     input         uart_rx_valid_in,
     input         uart_tx_busy_in
@@ -55,7 +55,6 @@ module data_path(
     wire [4:0]  alu_ctrl_out;
     wire [31:0] alu_out;
     wire should_branch;
-    wire [31:0] data_mem_out;
     wire [31:0] pc_gen_out;
     wire dummy_carry;
     wire [31:0] pc_gen_in;
