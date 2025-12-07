@@ -40,7 +40,7 @@ wire hazard_stall;
 
 data_path dp(
 //    .clk(clk),
-    .clk(slow_clk),
+    .clk(clk),
     .rst(rst),
     .inst_out_ext(inst_out),
     .branch_ext(),              // 연결 안함 (디버깅 전용)
