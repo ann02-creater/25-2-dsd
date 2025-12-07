@@ -240,7 +240,7 @@ module data_path(
 
     // Initialize memory from .coe file (Vivado synthesis)
     initial begin
-        $readmemh("haewon.coe", unified_mem, 0);
+        $readmemh("haewon.mem", unified_mem, 0);
     end
 
     // True Dual Port BRAM Logic
