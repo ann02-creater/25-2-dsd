@@ -1,5 +1,5 @@
-// Simplified UART test - Single clock domain (100MHz)
-// No CDC - CPU and UART run on same clock
+// UART Test - 50MHz CPU clock (same as UART baud rate generation)
+// Uses clock divider for CPU, but UART baud rate adjusted accordingly
 module fpga_debugger(
     input clk,
     input rstn,
@@ -13,15 +13,20 @@ module fpga_debugger(
 
 wire rst = ~rstn;
 
-// All modules run on 100MHz clock - NO clock divider
-// This eliminates CDC issues completely
+// Clock divider - 50MHz CPU clock
+reg div_2;
+always @(posedge clk or posedge rst) begin
+    if (rst) div_2 <= 0;
+    else     div_2 <= ~div_2;
+end
+wire cpu_clk = div_2;  // 100MHz / 2 = 50MHz
 
 // UART signals
 wire [7:0] uart_rx_data;
 wire uart_rx_valid;
 wire uart_tx_busy;
 
-// CPU signals - directly connected, no CDC needed
+// CPU signals
 wire [7:0] tx_data_cpu;
 wire tx_we_cpu;
 wire rx_re_cpu;
@@ -33,9 +38,9 @@ wire [31:0] data_read_1, data_read_2, write_data, imm_out, alu_mux, alu_out, dat
 wire [31:0] inst_out;
 wire forwarding_active, hazard_stall;
 
-// DATA PATH - runs on 100MHz
+// DATA PATH - runs on 50MHz
 data_path dp(
-    .clk(clk),              // 100MHz - same as UART
+    .clk(cpu_clk),          // 50MHz
     .rst(rst),
     .inst_out_ext(inst_out),
     .branch_ext(),
@@ -61,7 +66,7 @@ data_path dp(
     .data_mem_out_ext(data_mem_out),
     .led_reg_out(),
     
-    // Direct connection - no CDC
+    // UART interface
     .uart_tx_data_out(tx_data_cpu),
     .uart_tx_we_out(tx_we_cpu),
     .uart_rx_re_out(rx_re_cpu),
@@ -73,17 +78,18 @@ data_path dp(
     .hazard_stall_ext(hazard_stall)
 );
 
-// UART - runs on 100MHz
+// UART - runs on 50MHz (same as CPU, no CDC needed)
+// Baud rate: 50MHz / 434 = 115207 baud (close to 115200)
 uart u_uart (
-    .clk(clk),              // 100MHz
+    .clk(cpu_clk),          // 50MHz - same as CPU!
     .resetn(!rst),
     .ser_tx(uart_tx),
     .ser_rx(uart_rx),
-    .cfg_divider(16'd868),  // 100MHz / 868 = 115200 baud
+    .cfg_divider(16'd434),  // 50MHz / 434 = 115200 baud
     .reg_dat_di(tx_data_cpu),
     .reg_dat_do(uart_rx_data),
-    .reg_dat_we(tx_we_cpu), // Direct connection
-    .reg_dat_re(rx_re_cpu), // Direct connection
+    .reg_dat_we(tx_we_cpu),
+    .reg_dat_re(rx_re_cpu),
     .tx_busy(uart_tx_busy),
     .rx_valid(uart_rx_valid)
 );
@@ -92,11 +98,11 @@ uart u_uart (
 assign led[0] = uart_rx_valid;
 assign led[1] = uart_tx_busy;
 
-// 7-segment display
+// 7-segment display (runs on 100MHz for smooth display)
 wire [15:0] disp = sw_pc ? PC[15:0] : {8'h00, uart_rx_data};
 
 Four_Digit_Seven_Segment_Driver_2 segger (
-    .clk(clk),
+    .clk(clk),              // 100MHz for display refresh
     .num(disp),
     .Anode(anode),
     .LED_out(seg)
