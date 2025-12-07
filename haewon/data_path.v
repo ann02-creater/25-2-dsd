@@ -25,7 +25,7 @@
 
 module data_path(
     input clk, input rst, 
-    //???πˆ±Î???
+    //???Î≤ÑÍπÖ???
     output [31:0]inst_out_ext, output branch_ext, mem_read_ext, mem_to_reg_ext, mem_write_ext, alu_src_ext, reg_write_ext,
     output [1:0]alu_op_ext, output z_flag_ext, output [4:0]alu_ctrl_out_ext, output [31:0]PC_inc_ext, output [31:0]pc_gen_out_ext, output [31:0]PC_ext, output [31:0]PC_in_ext,
     output [31:0]data_read_1_ext, output [31:0]data_read_2_ext, output [31:0]write_data_ext, output [31:0]imm_out_ext, output [31:0]shift_ext, output [31:0]alu_mux_ext,
@@ -78,8 +78,8 @@ module data_path(
         clk,
         {PC, inst_out},        // ????? ??????
         rst,
-        ~stall,                // Enable (stall == 1????? IF/ID ????????????? ∏ÿ√·??? (Freeze))
-        {IF_ID_PC, IF_ID_Inst} // √‚∑¬
+        ~stall,                // Enable (stall == 1????? IF/ID ????????????? Î©àÏ∂ò??? (Freeze))
+        {IF_ID_PC, IF_ID_Inst} // Ï∂úÎ†•
     );
 
     // ----------------------------------------------------------------------
@@ -92,7 +92,7 @@ module data_path(
     wire [4:0] ID_EX_Rs1, ID_EX_Rs2, ID_EX_Rd;
     wire ID_Ex_Func25;
 
-    // stall??? ??? control signal?????? 0????? ∏∏µÈ?? ?????? real_* ??????
+    // stall??? ??? control signal?????? 0????? ÎßåÎì§?? ?????? real_* ??????
     wire real_reg_write  = stall ? 1'b0 : reg_write;
     wire real_mem_to_reg = stall ? 1'b0 : mem_to_reg;
     wire real_mem_read   = stall ? 1'b0 : mem_read;
@@ -101,7 +101,7 @@ module data_path(
 
     register #(160) ID_EX (
         clk,
-        {   // ID ???∞Ëø°??? ???????????? π≠¿Ω
+        {   // ID ???Í≥ÑÏóê??? ???????????? Î¨∂Ïùå
             real_reg_write,
             real_mem_to_reg,
             real_can_branch,
@@ -125,7 +125,7 @@ module data_path(
         }, 
         rst,
         1'b1, // ?????? enable
-        {   // EX ???∞Ëø°??? ????????? √‚∑¬???
+        {   // EX ???Í≥ÑÏóê??? ????????? Ï∂úÎ†•???
             ID_EX_reg_write,
             ID_EX_mem_to_reg,
             ID_EX_can_branch,
@@ -171,10 +171,10 @@ module data_path(
         zero_flag,
         over_flag,
         sign_flag,
-        jump_mux,   // ALU ∞·∞˙ or PC+4 or ...
+        jump_mux,   // ALU Í≤∞Í≥º or PC+4 or ...
         ID_EX_Func[2:0],
-        ID_EX_RegR2,    // ∏ﬁ∏∏Æø° ??? ?????????(sw)
-        ID_EX_Rd    // ∏Ò¿˚?? ??????????? π¯»£
+        ID_EX_RegR2,    // Î©îÎ™®Î¶¨Ïóê ??? ?????????(sw)
+        ID_EX_Rd    // Î™©Ï†Å?? ??????????? Î≤àÌò∏
     },
     rst,
     1'b1,
@@ -206,9 +206,9 @@ module data_path(
         EX_MEM_reg_write,
         EX_MEM_mem_to_reg,
         EX_MEM_sys,
-        data_mem_out_ext,   // ∏ﬁ∏∏Æ∑Œ????? ????????? ??(LW)
-        EX_MEM_ALU_out, // ALU ∞·∞˙
-        EX_MEM_Rd   // ∏Ò¿˚?? ??????????? π¯»£
+        data_mem_out_ext,   // Î©îÎ™®Î¶¨Î°ú????? ????????? ??(LW)
+        EX_MEM_ALU_out, // ALU Í≤∞Í≥º
+        EX_MEM_Rd   // Î™©Ï†Å?? ??????????? Î≤àÌò∏
     },
     rst,
     1'b1,
@@ -216,8 +216,8 @@ module data_path(
         MEM_WB_reg_write,
         MEM_WB_mem_to_reg,
         MEM_WB_sys,   
-        MEM_WB_Mem_out, // LW ∞·∞˙
-        MEM_WB_ALU_out, // R-type, ¡÷º“ ∞ËªÍ ???
+        MEM_WB_Mem_out, // LW Í≤∞Í≥º
+        MEM_WB_ALU_out, // R-type, Ï£ºÏÜå Í≥ÑÏÇ∞ ???
         MEM_WB_Rd   
     });
 
@@ -263,20 +263,27 @@ module data_path(
     assign bram_data_out = bram_data_out_reg;
 
     // Memory-mapped I/O and BRAM data mux
+    // .coe uses: 0x40000004 = status, 0x40000005 = data
+    wire uart_region = (EX_MEM_ALU_out[31:3] == 29'h08000000);  // 0x40000000-0x40000007
+    wire uart_status_addr = (EX_MEM_ALU_out[2:0] == 3'd4);      // offset 4
+    wire uart_data_addr = (EX_MEM_ALU_out[2:0] == 3'd5) || (EX_MEM_ALU_out[2:0] == 3'd0);  // offset 0 or 5
+    
     always @(*) begin
-        if (EX_MEM_ALU_out == 32'h1000_0000) begin  // CPU?? lw?? 0x1000_0000??? ????????
-            data_mem_out_ext = {24'b0, uart_rx_data_in};
-            end
-        else if (EX_MEM_ALU_out == 32'h1000_0004) begin
+        if (uart_region && uart_status_addr) begin
+            // Status register: bit0=rx_valid, bit1=tx_busy
             data_mem_out_ext = {30'b0, uart_tx_busy_in, uart_rx_valid_in};
-            end
+        end
+        else if (uart_region && uart_data_addr) begin
+            // Data register: rx_data
+            data_mem_out_ext = {24'b0, uart_rx_data_in};
+        end
         else begin
             data_mem_out_ext = bram_data_out;
-            end
+        end
     end
 
-    // UART RX read enable ?????? ??????
-    assign uart_rx_re_out = (EX_MEM_mem_read && EX_MEM_ALU_out == 32'h1000_0000);
+    // UART RX read enable - triggered when reading data register
+    assign uart_rx_re_out = (EX_MEM_mem_read && uart_region && uart_data_addr);
 
     // LED and UART control
     always @(posedge clk or posedge rst) begin
@@ -288,7 +295,7 @@ module data_path(
             if (EX_MEM_ALU_out == 32'h2000_0000) begin    // LED write
                 led_reg_out <= EX_MEM_RegR2[15:0];
                 uart_tx_we_out <= 1'b0;
-            end else if (EX_MEM_ALU_out == 32'h1000_0000) begin  // UART TX write
+            end else if (uart_region && uart_data_addr) begin  // UART TX write (0x40000000 or 0x40000005)
                 uart_tx_data_out <= EX_MEM_RegR2[7:0];
                 uart_tx_we_out <= 1'b1;
             end else begin
@@ -351,7 +358,7 @@ module data_path(
 //    assign PC_inc_ext = pc_inc_out;
     ripple pc_inc (PC, inst_out[1:0] ?  3'd4 : 3'd2, pc_inc_out, dummy_carry_2);
 
-    multiplexer write_back (MEM_WB_ALU_out, MEM_WB_Mem_out, MEM_WB_mem_to_reg, write_data); // ALU ∞·∞˙/Memory data(LW ∞·∞˙)
+    multiplexer write_back (MEM_WB_ALU_out, MEM_WB_Mem_out, MEM_WB_mem_to_reg, write_data); // ALU Í≤∞Í≥º/Memory data(LW Í≤∞Í≥º)
         
     Forward_Unit FU (EX_MEM_reg_write, MEM_WB_reg_write, EX_MEM_Rd, ID_EX_Rs1, ID_EX_Rs2, MEM_WB_Rd, forwardA, forwardB);
     
@@ -365,26 +372,26 @@ module data_path(
     assign final_pc = (MEM_WB_sys & inst_out[20]) ? PC : new_PC_in;
 //    assign final_pc = new_PC_in;
     
-    // ---- PC?? +4??? ?????? ¡ı??????????? ????????? πˆ¿¸ ----
+    // ---- PC?? +4??? ?????? Ï¶ù??????????? ????????? Î≤ÑÏ†Ñ ----
 
 //// 1) PC + 4
 //wire [31:0] pc_inc_simple;
 //assign pc_inc_simple = PC + 32'd4;
 
-//// 2) PC_in / new_PC_in / final_pc ∏µŒ pc_inc_simple?? ??????
+//// 2) PC_in / new_PC_in / final_pc Î™®Îëê pc_inc_simple?? ??????
 //assign PC_in      = pc_inc_simple;
 //assign new_PC_in  = pc_inc_simple;
 //assign final_pc   = pc_inc_simple;
 
-//// debug??? √‚∑¬?? ±◊≥… ??? ∞™µÈ??
+//// debug??? Ï∂úÎ†•?? Í∑∏ÎÉ• ??? Í∞íÎì§??
 //assign PC_inc_ext    = pc_inc_simple;
 //assign pc_gen_out_ext = 32'b0;  // ?????? 0?????
 ////
     
-    // forwarding??? ??? π¯¿Ã?????? ∞…∏Æ?? 1
+    // forwarding??? ??? Î≤àÏù¥?????? Í±∏Î¶¨?? 1
     assign forwarding_active_ext = (forwardA != 2'b00) || (forwardB != 2'b00);
     
-    // hazard unit??? stall??? ∞…∞Ì ???????? 1
+    // hazard unit??? stall??? Í±∏Í≥† ???????? 1
     assign hazard_stall_ext = stall;
 
 
