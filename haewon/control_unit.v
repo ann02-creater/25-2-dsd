@@ -148,7 +148,7 @@ always @(*) begin
                 sys=1;
                 end
     
-         default: begin 
+         default: begin
             branch = 0;
             memRead = 0;
             ALUOp=2'b01;
@@ -158,6 +158,7 @@ always @(*) begin
             RegWrite=0;
             memtoReg=0;
             pc_gen_sel=0;
+            rd_sel=2'b00;
             end
                                              
     endcase

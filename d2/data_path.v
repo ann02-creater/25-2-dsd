@@ -30,7 +30,7 @@ module data_path(
     output [31:0]data_read_1_ext, output [31:0]data_read_2_ext, output [31:0]write_data_ext, output [31:0]imm_out_ext, output [31:0]shift_ext, output [31:0]alu_mux_ext,
     output [31:0]alu_out_ext, output [31:0]data_mem_out_ext, output reg [15:0] led_reg_out,
 
-    output [7:0]  uart_tx_data_out,
+    output reg [7:0]  uart_tx_data_out,
     output reg       uart_tx_we_out,
     output reg       uart_rx_re_out,
     input  [7:0]  uart_rx_data_in,
@@ -68,16 +68,16 @@ module data_path(
     // 1. IF/ID Pipeline Register (Stall Logic: Freeze)
     // ----------------------------------------------------------------------
     
-    // íŒŒì´í”„ë¼ì¸ ë ˆì§€ìŠ¤í„° ì¶œë ¥ ì™€ì´ì–´ ì„ ì–¸
+    // ?ŒŒ?´?”„?¼?¸ ? ˆì§??Š¤?„° ì¶œë ¥ ???´?–´ ?„ ?–¸
     wire [31:0] IF_ID_PC, IF_ID_Inst;
    
-    // IF-ID ë ˆì§€ìŠ¤í„°: Stall ì‹ í˜¸(Hazard Unitì—ì„œ ì˜´)ê°€ 0ì¼ ë•Œë§Œ ì—…ë°ì´íŠ¸
-    // Stallì´ 1ì´ë©´ Enableì´ 0ì´ ë˜ì–´ ì´ì „ ê°’ì„ ìœ ì§€í•¨ (Freeze)
+    // IF-ID ? ˆì§??Š¤?„°: Stall ?‹ ?˜¸(Hazard Unit?—?„œ ?˜´)ê°? 0?¼ ?•Œë§? ?—…?°?´?Š¸
+    // Stall?´ 1?´ë©? Enable?´ 0?´ ?˜?–´ ?´? „ ê°’ì„ ?œ ì§??•¨ (Freeze)
     register #(64) IF_ID (
         clk,
-        {PC, inst_out},        // ì…ë ¥
+        {PC, inst_out},        // ?…? ¥
         rst,
-        ~stall,                // Enable (Stallì¼ ë•Œ ë©ˆì¶¤)
+        ~stall,                // Enable (Stall?¼ ?•Œ ë©ˆì¶¤)
         {IF_ID_PC, IF_ID_Inst} // ì¶œë ¥
     );
 
@@ -91,7 +91,7 @@ module data_path(
     wire [4:0] ID_EX_Rs1, ID_EX_Rs2, ID_EX_Rd;
     wire ID_Ex_Func25;
 
-    // â˜… Stall ë°œìƒ ì‹œ ID/EXë¡œ ë„˜ì–´ê°€ëŠ” ì œì–´ ì‹ í˜¸ë¥¼ 0ìœ¼ë¡œ ë§Œë“¦ (ê±°í’ˆ ì£¼ì…) â˜…
+    // ?˜… Stall ë°œìƒ ?‹œ ID/EXë¡? ?„˜?–´ê°??Š” ? œ?–´ ?‹ ?˜¸ë¥? 0?œ¼ë¡? ë§Œë“¦ (ê±°í’ˆ ì£¼ì…) ?˜…
     wire real_reg_write  = stall ? 1'b0 : reg_write;
     wire real_mem_to_reg = stall ? 1'b0 : mem_to_reg;
     wire real_mem_read   = stall ? 1'b0 : mem_read;
@@ -100,7 +100,7 @@ module data_path(
 
     register #(160) ID_EX (
         clk,
-        {   // ì œì–´ ì‹ í˜¸ (Stall ì‹œ 0ìœ¼ë¡œ ë³€í™˜ë¨)
+        {   // ? œ?–´ ?‹ ?˜¸ (Stall ?‹œ 0?œ¼ë¡? ë³??™˜?¨)
             real_reg_write,
             real_mem_to_reg,
             real_can_branch,
@@ -111,7 +111,7 @@ module data_path(
             pc_gen_sel,
             sys,
             rd_sel,
-            // ë°ì´í„° (Stall ì‹œ ì“°ë ˆê¸° ê°’ì´ ë„˜ì–´ê°€ë„ ì œì–´ì‹ í˜¸ê°€ 0ì´ë¼ ì•ˆì „í•¨)
+            // ?°?´?„° (Stall ?‹œ ?“°? ˆê¸? ê°’ì´ ?„˜?–´ê°??„ ? œ?–´?‹ ?˜¸ê°? 0?´?¼ ?•ˆ? „?•¨)
             IF_ID_PC,
             read_data_1,
             read_data_2,
@@ -124,7 +124,7 @@ module data_path(
             IF_ID_Inst[`IR_rd]
         }, 
         rst,
-        1'b1, // ID/EXëŠ” í•­ìƒ ì—…ë°ì´íŠ¸ (Bubbleì„ ë‹¤ìŒ ë‹¨ê³„ë¡œ ë°€ì–´ë‚´ì•¼ í•˜ë¯€ë¡œ)
+        1'b1, // ID/EX?Š” ?•­?ƒ ?—…?°?´?Š¸ (Bubble?„ ?‹¤?Œ ?‹¨ê³„ë¡œ ë°??–´?‚´?•¼ ?•˜ë¯?ë¡?)
         {   
             ID_EX_reg_write,
             ID_EX_mem_to_reg,
@@ -243,8 +243,8 @@ module data_path(
 
     // UART RX read enable signal generation
     reg uart_rx_re_out_reg;
-    assign uart_rx_re_out = uart_rx_re_out_reg;
-    
+    always@(*) begin uart_rx_re_out = uart_rx_re_out_reg;
+    end
     always @(*) begin
         uart_rx_re_out_reg = 1'b0;
         // When reading UART data address, acknowledge the read
@@ -282,7 +282,7 @@ module data_path(
     // NOP insertion during stall
     assign inst_out = stall ? 32'h00_00_00_33 : inst_mem_out; 
     
-    // ì¶œë ¥ í¬íŠ¸ ì—°ê²°
+    // ì¶œë ¥ ?¬?Š¸ ?—°ê²?
     assign branch_ext = can_branch;
     assign mem_read_ext = mem_read;
     assign mem_to_reg_ext = mem_to_reg;

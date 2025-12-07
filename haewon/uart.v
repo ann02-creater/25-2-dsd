@@ -1,10 +1,11 @@
 `timescale 1ns / 1ps
+
 module uart (
     input clk,
     input resetn,
     output ser_tx,
     input  ser_rx,
-    input  [15:0] cfg_divider, // [ìˆ˜ì •ë¨] 16ë¹„íŠ¸ë¡œ í™•ì¥ Good!
+    input  [15:0] cfg_divider, // [?ˆ˜? •?¨] 16ë¹„íŠ¸ë¡? ?™•?¥ Good!
     input  [7:0]  reg_dat_di,
     output [7:0]  reg_dat_do,
     input         reg_dat_we,
@@ -26,7 +27,7 @@ module uart (
     assign ser_tx = tx_shift_reg[0];
     assign tx_busy = (tx_bit_cnt != 0);
     assign rx_valid = rx_valid_reg;
-    // (ì‚­ì œí•¨) assign rx_data = u_uart.reg_dat_do; -> ì´ê±´ top ëª¨ë“ˆì—ì„œ ì—°ê²°í•˜ëŠ” ì„ ì…ë‹ˆë‹¤.
+    // (?‚­? œ?•¨) assign rx_data = u_uart.reg_dat_do; -> ?´ê±? top ëª¨ë“ˆ?—?„œ ?—°ê²°í•˜?Š” ?„ ?…?‹ˆ?‹¤.
 
     always @(posedge clk) begin
         if (!resetn) begin
@@ -40,7 +41,7 @@ module uart (
             rx_data_reg <= 0;
         end else begin
             // Configuration 
-            cfg_div <= {16'd0, cfg_divider}; // [ìˆ˜ì •ë¨] 16ë¹„íŠ¸ íŒ¨ë”© Good!
+            cfg_div <= {16'd0, cfg_divider}; // [?ˆ˜? •?¨] 16ë¹„íŠ¸ ?Œ¨?”© Good!
 
             // Transmitter
             if (tx_cnt) tx_cnt <= tx_cnt - 1;

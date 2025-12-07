@@ -37,8 +37,8 @@ module uart_tx(
             state <= IDLE;
             bit_cnt <= 3'd0;
             tx_buffer <= 8'd0;
-            parity_bit <= 1b'0; 
-            tx_data_out <= 1'b1;
+            parity_bit <= 1'b0;
+            tx_data_out_out <= 1'b1;
             tx_busy <= 1'b0;
         end else begin
             case (state)
@@ -47,8 +47,8 @@ module uart_tx(
                     tx_busy <= 1'b0; // 전송 중 아님
                     if (tx_start_pulse) begin
                         state <= START;
-                        tx_buffer <= tx_data_outt_in;
-                        parity_bit <= ^tx_data_outt_in; 
+                        tx_buffer <= tx_data_out_in;
+                        parity_bit <= ^tx_data_out_in; 
                         bit_cnt <= 3'd0;
                         tx_busy <= 1'b1; // 전송중
                     end

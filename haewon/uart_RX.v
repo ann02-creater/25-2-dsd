@@ -3,7 +3,7 @@ module uart_rx(
     input  wire       reset,
     input  wire       rx_data,
     output reg  [7:0] rx_ascii_reg,
-    output reg        parity_error
+    output reg        parity_error,
     output reg        rx_data_valid // 10개의 값 중 하나만 눌렀을 때 작동함
 );
 

@@ -6,7 +6,7 @@ module fpga_debugger(
     output uart_tx,
     output [6:0] seg,
     output [3:0] anode,
-    output reg [2:0] led     // LED0 만 사용
+    output [2:0] led     // LED 3개만 사용 (디버깅용)
 );
 wire rst;
 assign rst = ~rstn;
@@ -39,20 +39,32 @@ wire forwarding_active;
 wire hazard_stall;
 
 data_path dp(
-//    .clk(clk), 
-    .clk(slow_clk), 
+//    .clk(clk),
+    .clk(slow_clk),
     .rst(rst),
     .inst_out_ext(inst_out),
-    .PC_ext(PC), .PC_in_ext(PC_in),
+    .branch_ext(),              // 연결 안함 (디버깅 전용)
+    .mem_read_ext(),            // 연결 안함
+    .mem_to_reg_ext(),          // 연결 안함
+    .mem_write_ext(),           // 연결 안함
+    .alu_src_ext(),             // 연결 안함
+    .reg_write_ext(),           // 연결 안함
+    .alu_op_ext(),              // 연결 안함
+    .z_flag_ext(),              // 연결 안함
+    .alu_ctrl_out_ext(),        // 연결 안함
     .PC_inc_ext(PC_inc),
     .pc_gen_out_ext(PC_gen_out),
+    .PC_ext(PC),
+    .PC_in_ext(PC_in),
     .data_read_1_ext(data_read_1),
     .data_read_2_ext(data_read_2),
     .write_data_ext(write_data),
     .imm_out_ext(imm_out),
+    .shift_ext(),               // 연결 안함
     .alu_mux_ext(alu_mux),
     .alu_out_ext(alu_out),
     .data_mem_out_ext(data_mem_out),
+    .led_reg_out(),             // 연결 안함 (사용하지 않음)
 
     .uart_tx_data_out(tx_data),
     .uart_tx_we_out(tx_we),
@@ -60,7 +72,7 @@ data_path dp(
     .uart_rx_data_in(rx_data),
     .uart_rx_valid_in(rx_valid),
     .uart_tx_busy_in(tx_busy),
-    
+
     .forwarding_active_ext(forwarding_active),
     .hazard_stall_ext(hazard_stall)
 );
@@ -83,27 +95,17 @@ uart u_uart (
 );
 
 // -----------------------------
-// LED0 = PC 출력 여부 표시
+// LED 출력: 디버깅 정보 표시
 // -----------------------------
-always @(*) begin
-    led = 3'b0;               // 기본은 모두 OFF
-
-    led[0]  = sw_pc;           // PC 표시 모드 여부
-    led[1] = hazard_stall;    // hazard 처리(stall) 여부
-    led[2] = forwarding_active; // forwarding 동작 여부
-end
-//always @(*) begin
-//    // PC[2:0]를 직접 LED로 보기
-//    led[0] = PC[0];
-//    led[1] = PC[1];
-//    led[2] = PC[2];
-//end
+assign led[0] = rx_valid;         // UART RX 데이터 수신 여부 (테스트용)
+assign led[1] = tx_busy;          // UART TX 전송 중 여부
+assign led[2] = |rx_data;         // RX 데이터가 0이 아닌지 확인
 
 
 // -----------------------------
 // 7-SEG OUTPUT
-// PC[15:0] 만 출력
-// sw_pc = 1일 때만 표시
+// sw_pc = 0: UART RX 데이터 표시 (테스트용)
+// sw_pc = 1: PC[15:0] 표시
 // -----------------------------
 reg [15:0] disp;
 
@@ -111,7 +113,7 @@ always @(*) begin
     if (sw_pc)
         disp = PC[15:0];
     else
-        disp = 16'h0000;
+        disp = {8'h00, rx_data}; // UART RX 데이터 표시
 end
 
 Four_Digit_Seven_Segment_Driver_2 segger (
