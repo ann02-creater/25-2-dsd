@@ -1,3 +1,5 @@
+// Simplified UART test - Single clock domain (100MHz)
+// No CDC - CPU and UART run on same clock
 module fpga_debugger(
     input clk,
     input rstn,
@@ -11,141 +13,29 @@ module fpga_debugger(
 
 wire rst = ~rstn;
 
-// Clock divider - 25MHz CPU clock
-reg [1:0] div;
-always @(posedge clk or posedge rst) begin
-    if (rst) div <= 0;
-    else     div <= div + 1;
-end
-wire cpu_clk = div[1];
+// All modules run on 100MHz clock - NO clock divider
+// This eliminates CDC issues completely
 
-// UART signals (100MHz domain)
+// UART signals
 wire [7:0] uart_rx_data;
 wire uart_rx_valid;
 wire uart_tx_busy;
 
-// CPU signals (cpu_clk domain)
+// CPU signals - directly connected, no CDC needed
 wire [7:0] tx_data_cpu;
 wire tx_we_cpu;
 wire rx_re_cpu;
 
-// =========================================================
-// CDC: CPU TX signals (cpu_clk -> 100MHz)
-// =========================================================
-// TX data latch - hold data stable
-reg [7:0] tx_data_hold;
-reg tx_we_hold;
-
-always @(posedge cpu_clk or posedge rst) begin
-    if (rst) begin
-        tx_data_hold <= 8'h00;
-        tx_we_hold <= 1'b0;
-    end else begin
-        if (tx_we_cpu) begin
-            tx_data_hold <= tx_data_cpu;
-            tx_we_hold <= 1'b1;
-        end else if (tx_we_ack) begin
-            tx_we_hold <= 1'b0;
-        end
-    end
-end
-
-// Synchronize tx_we_hold to 100MHz and detect edge
-reg [2:0] tx_we_sync;
-always @(posedge clk or posedge rst) begin
-    if (rst) tx_we_sync <= 3'b000;
-    else     tx_we_sync <= {tx_we_sync[1:0], tx_we_hold};
-end
-wire tx_we_pulse = tx_we_sync[1] & ~tx_we_sync[2];
-
-// Ack back to CPU domain
-reg tx_we_ack_100;
-always @(posedge clk or posedge rst) begin
-    if (rst) tx_we_ack_100 <= 1'b0;
-    else     tx_we_ack_100 <= tx_we_sync[2];
-end
-
-reg [1:0] tx_we_ack_sync;
-always @(posedge cpu_clk or posedge rst) begin
-    if (rst) tx_we_ack_sync <= 2'b00;
-    else     tx_we_ack_sync <= {tx_we_ack_sync[0], tx_we_ack_100};
-end
-wire tx_we_ack = tx_we_ack_sync[1];
-
-// =========================================================
-// CDC: CPU RX signals (cpu_clk -> 100MHz)
-// =========================================================
-reg rx_re_hold;
-
-always @(posedge cpu_clk or posedge rst) begin
-    if (rst) begin
-        rx_re_hold <= 1'b0;
-    end else begin
-        if (rx_re_cpu) begin
-            rx_re_hold <= 1'b1;
-        end else if (rx_re_ack) begin
-            rx_re_hold <= 1'b0;
-        end
-    end
-end
-
-reg [2:0] rx_re_sync;
-always @(posedge clk or posedge rst) begin
-    if (rst) rx_re_sync <= 3'b000;
-    else     rx_re_sync <= {rx_re_sync[1:0], rx_re_hold};
-end
-wire rx_re_pulse = rx_re_sync[1] & ~rx_re_sync[2];
-
-reg rx_re_ack_100;
-always @(posedge clk or posedge rst) begin
-    if (rst) rx_re_ack_100 <= 1'b0;
-    else     rx_re_ack_100 <= rx_re_sync[2];
-end
-
-reg [1:0] rx_re_ack_sync;
-always @(posedge cpu_clk or posedge rst) begin
-    if (rst) rx_re_ack_sync <= 2'b00;
-    else     rx_re_ack_sync <= {rx_re_ack_sync[0], rx_re_ack_100};
-end
-wire rx_re_ack = rx_re_ack_sync[1];
-
-// =========================================================
-// CDC: UART signals to CPU (100MHz -> cpu_clk)
-// =========================================================
-reg [1:0] rx_valid_sync;
-always @(posedge cpu_clk or posedge rst) begin
-    if (rst) rx_valid_sync <= 2'b00;
-    else     rx_valid_sync <= {rx_valid_sync[0], uart_rx_valid};
-end
-
-reg [1:0] tx_busy_sync;
-always @(posedge cpu_clk or posedge rst) begin
-    if (rst) tx_busy_sync <= 2'b00;
-    else     tx_busy_sync <= {tx_busy_sync[0], uart_tx_busy};
-end
-
-reg [7:0] rx_data_sync1, rx_data_sync2;
-always @(posedge cpu_clk or posedge rst) begin
-    if (rst) begin
-        rx_data_sync1 <= 8'h00;
-        rx_data_sync2 <= 8'h00;
-    end else begin
-        rx_data_sync1 <= uart_rx_data;
-        rx_data_sync2 <= rx_data_sync1;
-    end
-end
-
-// =========================================================
-// DATA PATH
-// =========================================================
+// Data path signals
 wire [31:0] PC;
 wire [31:0] PC_inc, PC_gen_out, PC_in;
 wire [31:0] data_read_1, data_read_2, write_data, imm_out, alu_mux, alu_out, data_mem_out;
 wire [31:0] inst_out;
 wire forwarding_active, hazard_stall;
 
+// DATA PATH - runs on 100MHz
 data_path dp(
-    .clk(cpu_clk),
+    .clk(clk),              // 100MHz - same as UART
     .rst(rst),
     .inst_out_ext(inst_out),
     .branch_ext(),
@@ -170,39 +60,39 @@ data_path dp(
     .alu_out_ext(alu_out),
     .data_mem_out_ext(data_mem_out),
     .led_reg_out(),
+    
+    // Direct connection - no CDC
     .uart_tx_data_out(tx_data_cpu),
     .uart_tx_we_out(tx_we_cpu),
     .uart_rx_re_out(rx_re_cpu),
-    .uart_rx_data_in(rx_data_sync2),
-    .uart_rx_valid_in(rx_valid_sync[1]),
-    .uart_tx_busy_in(tx_busy_sync[1]),
+    .uart_rx_data_in(uart_rx_data),
+    .uart_rx_valid_in(uart_rx_valid),
+    .uart_tx_busy_in(uart_tx_busy),
+    
     .forwarding_active_ext(forwarding_active),
     .hazard_stall_ext(hazard_stall)
 );
 
-// =========================================================
-// UART
-// =========================================================
+// UART - runs on 100MHz
 uart u_uart (
-    .clk(clk),
+    .clk(clk),              // 100MHz
     .resetn(!rst),
     .ser_tx(uart_tx),
     .ser_rx(uart_rx),
-    .cfg_divider(16'd868),
-    .reg_dat_di(tx_data_hold),   // Use latched data
+    .cfg_divider(16'd868),  // 100MHz / 868 = 115200 baud
+    .reg_dat_di(tx_data_cpu),
     .reg_dat_do(uart_rx_data),
-    .reg_dat_we(tx_we_pulse),
-    .reg_dat_re(rx_re_pulse),
+    .reg_dat_we(tx_we_cpu), // Direct connection
+    .reg_dat_re(rx_re_cpu), // Direct connection
     .tx_busy(uart_tx_busy),
     .rx_valid(uart_rx_valid)
 );
 
-// =========================================================
-// LED & Display
-// =========================================================
+// LED - debug indicators
 assign led[0] = uart_rx_valid;
 assign led[1] = uart_tx_busy;
 
+// 7-segment display
 wire [15:0] disp = sw_pc ? PC[15:0] : {8'h00, uart_rx_data};
 
 Four_Digit_Seven_Segment_Driver_2 segger (
