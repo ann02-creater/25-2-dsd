@@ -13,7 +13,8 @@ module fpga_debugger(
     output [1:0] led
 );
 
-wire rst = ~rstn;
+wire rst = rstn;
+wire resetn_uart = ~rstn;
 
 // ========================================
 // UART 신호 (Loopback 테스트에서 검증됨)
@@ -80,7 +81,7 @@ data_path dp(
 // ========================================
 uart u_uart (
     .clk(clk),              // 100MHz
-    .resetn(!rst),
+    .resetn(resetn_uart),
     .ser_tx(uart_tx),
     .ser_rx(uart_rx),
     .cfg_divider(16'd868),  // 100MHz / 868 = 115200
