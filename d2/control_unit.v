@@ -158,6 +158,7 @@ always @(*) begin
             RegWrite=0;
             memtoReg=0;
             pc_gen_sel=0;
+            rd_sel = 2'b00;
             end
                                              
     endcase

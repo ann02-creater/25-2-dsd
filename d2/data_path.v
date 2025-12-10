@@ -25,12 +25,12 @@
 
 module data_path(
     input clk, input rst, 
-    //디버깅용
+    //?�貒��?鹻
     output [31:0]inst_out_ext, output branch_ext, mem_read_ext, mem_to_reg_ext, mem_write_ext, alu_src_ext, reg_write_ext,
     output [1:0]alu_op_ext, output z_flag_ext, output [4:0]alu_ctrl_out_ext, output [31:0]PC_inc_ext, output [31:0]pc_gen_out_ext, output [31:0]PC_ext, output [31:0]PC_in_ext,
     output [31:0]data_read_1_ext, output [31:0]data_read_2_ext, output [31:0]write_data_ext, output [31:0]imm_out_ext, output [31:0]shift_ext, output [31:0]alu_mux_ext,
     output [31:0]alu_out_ext, output [31:0]data_mem_out_ext, output reg [15:0] led_reg_out,
-    // UART 연결 포트
+    // UART ?㜊窶? ?𡢢?䂻
     output reg [7:0]  uart_tx_data_out,
     output reg        uart_tx_we_out,
     output        uart_rx_re_out,
@@ -40,8 +40,9 @@ module data_path(
     output        forwarding_active_ext,
     output        hazard_stall_ext
 );
-
+    // Memory-mapped I/O and BRAM data mux
     wire [31:0] jump_mux;
+    reg [31:0] data_mem_out;
     wire [31:0] PC;
     wire [31:0] new_PC_in;
     wire [31:0] final_pc;
@@ -76,10 +77,10 @@ module data_path(
     
     register #(64) IF_ID (
         clk,
-        {PC, inst_out},        // 저장 내용
+        {PC, inst_out},        // ???𤟠 ?�?鹻
         rst,
-        ~stall,                // Enable (stall == 1이면 IF/ID 레지스터가 멈춘다 (Freeze))
-        {IF_ID_PC, IF_ID_Inst} // 출력
+        ~stall,                // Enable (stall == 1?𦚯諰? IF/ID ?�鴔??擪?�穈? 諰��?𠹻 (Freeze))
+        {IF_ID_PC, IF_ID_Inst} // 黺嶅�
     );
 
     // ----------------------------------------------------------------------
@@ -92,7 +93,7 @@ module data_path(
     wire [4:0] ID_EX_Rs1, ID_EX_Rs2, ID_EX_Rd;
     wire ID_Ex_Func25;
 
-    // stall일 때 control signal들을 0으로 만들기 위해 real_* 사용
+    // stall?𦉘 ?� control signal?㨩?� 0?尐諢? 諤𣕑㨩篣? ?�?㟲 real_* ?�?鹻
     wire real_reg_write  = stall ? 1'b0 : reg_write;
     wire real_mem_to_reg = stall ? 1'b0 : mem_to_reg;
     wire real_mem_read   = stall ? 1'b0 : mem_read;
@@ -101,7 +102,7 @@ module data_path(
 
     register #(160) ID_EX (
         clk,
-        {   // ID 단계에서 들어오는 묶음
+        {   // ID ?𡆀窸��?� ?㨩?𩸭?𠈔?� 諡塑�
             real_reg_write,
             real_mem_to_reg,
             real_can_branch,
@@ -124,8 +125,8 @@ module data_path(
             IF_ID_Inst[`IR_rd]
         }, 
         rst,
-        1'b1, // 항상 enable
-        {   // EX 단계에서 사용할 출력들
+        1'b1, // ?𨯙?� enable
+        {   // EX ?𡆀窸��?� ?�?鹻?� 黺嶅�?㨩
             ID_EX_reg_write,
             ID_EX_mem_to_reg,
             ID_EX_can_branch,
@@ -171,10 +172,10 @@ module data_path(
         zero_flag,
         over_flag,
         sign_flag,
-        jump_mux,   // ALU 결과 or PC+4 or ...
+        jump_mux,   // ALU 窶國頃 or PC+4 or ...
         ID_EX_Func[2:0],
-        ID_EX_RegR2,    // 메모리에 쓸 데이터(sw)
-        ID_EX_Rd    // 목적지 레지스터 번호
+        ID_EX_RegR2,    // 諰竾爸謔科� ?𤦉 ?㫲?𦚯?�(sw)
+        ID_EX_Rd    // 諈拖�鴔? ?�鴔??擪?� 貒�猹
     },
     rst,
     1'b1,
@@ -206,9 +207,9 @@ module data_path(
         EX_MEM_reg_write,
         EX_MEM_mem_to_reg,
         EX_MEM_sys,
-        data_mem_out,   // 메모리로부터 읽어온 값(LW)
-        EX_MEM_ALU_out, // ALU 결과
-        EX_MEM_Rd   // 목적지 레지스터 번호
+        data_mem_out,   // 諰竾爸謔禺�賱??� ?嚿?𩸭?㿥 穈?(LW)
+        EX_MEM_ALU_out, // ALU 窶國頃
+        EX_MEM_Rd   // 諈拖�鴔? ?�鴔??擪?� 貒�猹
     },
     rst,
     1'b1,
@@ -216,8 +217,8 @@ module data_path(
         MEM_WB_reg_write,
         MEM_WB_mem_to_reg,
         MEM_WB_sys,   
-        MEM_WB_Mem_out, // LW 결과
-        MEM_WB_ALU_out, // R-type, 주소 계산 등
+        MEM_WB_Mem_out, // LW 窶國頃
+        MEM_WB_ALU_out, // R-type, 鴥潰� 窸�� ?𢲡
         MEM_WB_Rd   
     });
 
@@ -226,7 +227,7 @@ module data_path(
     // ----------------------------------------------------------------------
     assign PC_ext = PC;
     assign PC_in_ext = PC_in;
-    register#(32) program_counter (clk, final_pc, rst, ~stall, PC); // ~stall일 때만 업데이트, stall이면 PC 유지
+    register#(32) program_counter (clk, final_pc, rst, ~stall, PC); // ~stall?𦉘 ?�諤? ?�?㫲?𦚯?䂻, stall?𦚯諰? PC ?�鴔?
 
     assign inst_out_ext = inst_out;
     wire [31:0] inst_mem_out;
@@ -247,9 +248,9 @@ module data_path(
     );
 
     // Memory-mapped I/O and BRAM data mux
-    reg [31:0] data_mem_out;
+
     always @(*) begin
-        if (EX_MEM_ALU_out == 32'h1000_0000) begin  // CPU가 lw로 0x1000_0000을 읽으면
+        if (EX_MEM_ALU_out == 32'h1000_0000) begin  // CPU穈? lw諢? 0x1000_0000?� ?嚿?尐諰?
             data_mem_out <= {24'b0, uart_rx_data_in};
             end
         else if (EX_MEM_ALU_out == 32'h1000_0004) begin
@@ -263,7 +264,7 @@ module data_path(
     // LED and UART control
     always @(posedge clk) begin
         if (EX_MEM_mem_write) begin
-            if (EX_MEM_ALU_out == 32'h2000_0000)    // CPU가 sw로 0x2000_0000에 쓰면
+            if (EX_MEM_ALU_out == 32'h2000_0000)    // CPU穈? sw諢? 0x2000_0000?� ?护諰?
                 led_reg_out <= EX_MEM_RegR2[15:0];
             else if (EX_MEM_ALU_out == 32'h1000_0000) begin
                 uart_tx_data_out <= EX_MEM_RegR2[7:0];
@@ -329,7 +330,7 @@ module data_path(
 //    assign PC_inc_ext = pc_inc_out;
     ripple pc_inc (PC, inst_out[1:0] ?  3'd4 : 3'd2, pc_inc_out, dummy_carry_2);
 
-    multiplexer write_back (MEM_WB_ALU_out, MEM_WB_Mem_out, MEM_WB_mem_to_reg, write_data); // ALU 결과/Memory data(LW 결과)
+    multiplexer write_back (MEM_WB_ALU_out, MEM_WB_Mem_out, MEM_WB_mem_to_reg, write_data); // ALU 窶國頃/Memory data(LW 窶國頃)
         
     Forward_Unit FU (EX_MEM_reg_write, MEM_WB_reg_write, EX_MEM_Rd, ID_EX_Rs1, ID_EX_Rs2, MEM_WB_Rd, forwardA, forwardB);
     
@@ -343,26 +344,26 @@ module data_path(
     assign final_pc = (MEM_WB_sys & inst_out[20]) ? PC : new_PC_in;
 //    assign final_pc = new_PC_in;
     
-    // ---- PC를 +4씩 단순 증가시키는 테스트 버전 ----
+    // ---- PC諝? +4?𨫣 ?𡆀?� 鴞祢??�?�?� ?�?擪?䂻 貒�� ----
 
 //// 1) PC + 4
 //wire [31:0] pc_inc_simple;
 //assign pc_inc_simple = PC + 32'd4;
 
-//// 2) PC_in / new_PC_in / final_pc 모두 pc_inc_simple로 통일
+//// 2) PC_in / new_PC_in / final_pc 諈刺� pc_inc_simple諢? ?�?𦉘
 //assign PC_in      = pc_inc_simple;
 //assign new_PC_in  = pc_inc_simple;
 //assign final_pc   = pc_inc_simple;
 
-//// debug용 출력은 그냥 이 값들로
+//// debug?鹻 黺嶅�?? 篞賈� ?𦚯 穈媙㨩諢?
 //assign PC_inc_ext    = pc_inc_simple;
-//assign pc_gen_out_ext = 32'b0;  // 일단 0으로
+//assign pc_gen_out_ext = 32'b0;  // ?𦉘?𡆀 0?尐諢?
 ////
     
-    // forwarding이 한 번이라도 걸리면 1
+    // forwarding?𦚯 ?� 貒�𦚯?𦉘?� 穇賈收諰? 1
     assign forwarding_active_ext = (forwardA != 2'b00) || (forwardB != 2'b00);
     
-    // hazard unit이 stall을 걸고 있으면 1
+    // hazard unit?𦚯 stall?� 穇資� ?�?尐諰? 1
     assign hazard_stall_ext = stall;
 
 

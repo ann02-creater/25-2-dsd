@@ -22,7 +22,7 @@
 
 * Change history: 09/17/2019 03:07:59 PM - Module created by Abd *El-Salam in the lab
 
-* 10/24/19 – Ahmed, Andrew, Abd El-Salam, and Rinal worked on the *module to make it compatible with the other modules modified in *the sources files
+* 10/24/19 ?? Ahmed, Andrew, Abd El-Salam, and Rinal worked on the *module to make it compatible with the other modules modified in *the sources files
 
 * 10/29/19- Ahmed, Andrew, Abd El-Salam, and Rinal made the final modificaions to the module
 
@@ -36,6 +36,7 @@ always @(*) begin
         2'b00: out = in << shamt;
         2'b01: out = in >>> shamt;
         2'b10: out = in >> shamt;
+        default: out = 32'b0;
     endcase
 end
 

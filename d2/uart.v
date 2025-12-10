@@ -4,7 +4,7 @@ module uart (
     input resetn,
     output ser_tx,
     input  ser_rx,
-    input  [15:0] cfg_divider, // [수정됨] 16비트로 확장 Good!
+    input  [15:0] cfg_divider, 
     input  [7:0]  reg_dat_di,
     output [7:0]  reg_dat_do,
     input         reg_dat_we,
@@ -26,7 +26,7 @@ module uart (
     assign ser_tx = tx_shift_reg[0];
     assign tx_busy = (tx_bit_cnt != 0);
     assign rx_valid = rx_valid_reg;
-    // (삭제함) assign rx_data = u_uart.reg_dat_do; -> 이건 top 모듈에서 연결하는 선입니다.
+  
 
     always @(posedge clk) begin
         if (!resetn) begin
@@ -40,7 +40,7 @@ module uart (
             rx_data_reg <= 0;
         end else begin
             // Configuration 
-            cfg_div <= {16'd0, cfg_divider}; // [수정됨] 16비트 패딩 Good!
+            cfg_div <= {16'd0, cfg_divider}; 
 
             // Transmitter
             if (tx_cnt) tx_cnt <= tx_cnt - 1;
