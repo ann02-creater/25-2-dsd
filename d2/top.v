@@ -114,17 +114,90 @@ module top(
     );
 
     // 7-segment driver: multiplexes 8 digits
+    
+    // --- DEBUG FEATURE: Capture and display generic UART TX data on 7-segment ---
+    reg [7:0] tx_buffer [7:0]; // 8-character buffer
+    integer i;
+    
+    always @(posedge clk) begin
+        if (rst) begin
+            for(i=0; i<8; i=i+1) tx_buffer[i] <= 8'h20; // Initialize with spaces
+        end else if (tx_we) begin
+            // Shift left and insert new char at right (Index 0 is rightmost digit in our logic)
+            // But for display reading left-to-right (Seg7..Seg0), usually Seg7 is left.
+            // Let's shift such that new char enters at Seg0 (Right) and scrolls to Seg7 (Left).
+            // So tx_buffer[0] = new_char, tx_buffer[1] = old_buffer[0]...
+            tx_buffer[0] <= tx_data;
+            for(i=1; i<8; i=i+1) tx_buffer[i] <= tx_buffer[i-1];
+        end
+    end
+
+    // ASCII to 7-segment decoding function
+    function [6:0] char_to_seg_top;
+        input [7:0] c;
+        begin
+            case (c)
+                "0": char_to_seg_top = 7'b1000000;
+                "1": char_to_seg_top = 7'b1111001;
+                "2": char_to_seg_top = 7'b0100100;
+                "3": char_to_seg_top = 7'b0110000;
+                "4": char_to_seg_top = 7'b0011001;
+                "5": char_to_seg_top = 7'b0010010;
+                "6": char_to_seg_top = 7'b0000010;
+                "7": char_to_seg_top = 7'b1111000;
+                "8": char_to_seg_top = 7'b0000000;
+                "9": char_to_seg_top = 7'b0010000;
+                "A": char_to_seg_top = 7'b0001000; "a": char_to_seg_top = 7'b0001000;
+                "B": char_to_seg_top = 7'b0000011; "b": char_to_seg_top = 7'b0000011;
+                "C": char_to_seg_top = 7'b1000110; "c": char_to_seg_top = 7'b1000110;
+                "D": char_to_seg_top = 7'b0100001; "d": char_to_seg_top = 7'b0100001;
+                "E": char_to_seg_top = 7'b0000110; "e": char_to_seg_top = 7'b0000110;
+                "F": char_to_seg_top = 7'b0001110; "f": char_to_seg_top = 7'b0001110;
+                "G": char_to_seg_top = 7'b0010000; "g": char_to_seg_top = 7'b0010000;
+                "H": char_to_seg_top = 7'b0001001; "h": char_to_seg_top = 7'b0001001;
+                "I": char_to_seg_top = 7'b1111001; "i": char_to_seg_top = 7'b1111001;
+                "J": char_to_seg_top = 7'b1100001; "j": char_to_seg_top = 7'b1100001;
+                "L": char_to_seg_top = 7'b1000111; "l": char_to_seg_top = 7'b1000111;
+                "N": char_to_seg_top = 7'b0000000; "n": char_to_seg_top = 7'b1101010; // n
+                "O": char_to_seg_top = 7'b1000000; "o": char_to_seg_top = 7'b0100011; // o
+                "P": char_to_seg_top = 7'b0001100; "p": char_to_seg_top = 7'b0001100;
+                "Q": char_to_seg_top = 7'b0011000; "q": char_to_seg_top = 7'b0011000;
+                "R": char_to_seg_top = 7'b0001000; "r": char_to_seg_top = 7'b0101111;
+                "S": char_to_seg_top = 7'b0010010; "s": char_to_seg_top = 7'b0010010;
+                "T": char_to_seg_top = 7'b0000111; "t": char_to_seg_top = 7'b0000111;
+                "U": char_to_seg_top = 7'b1000001; "u": char_to_seg_top = 7'b0011100; // u
+                "V": char_to_seg_top = 7'b0011100; "v": char_to_seg_top = 7'b0011100; // u looks like v
+                "Y": char_to_seg_top = 7'b0010001; "y": char_to_seg_top = 7'b0010001;
+                "-": char_to_seg_top = 7'b0111111;
+                "=": char_to_seg_top = 7'b0110111; // double dash approx
+                default: char_to_seg_top = 7'b1111111; // blank
+            endcase
+        end
+    endfunction
+    
+    // Select between Instruction Decoder (switch=0) and TX Buffer (switch=1)
+    wire [6:0] s0, s1, s2, s3, s4, s5, s6, s7;
+    
+    assign s0 = switch_0 ? char_to_seg_top(tx_buffer[0]) : seg0_pattern;
+    assign s1 = switch_0 ? char_to_seg_top(tx_buffer[1]) : seg1_pattern;
+    assign s2 = switch_0 ? char_to_seg_top(tx_buffer[2]) : seg2_pattern;
+    assign s3 = switch_0 ? char_to_seg_top(tx_buffer[3]) : seg3_pattern;
+    assign s4 = switch_0 ? char_to_seg_top(tx_buffer[4]) : seg4_pattern;
+    assign s5 = switch_0 ? char_to_seg_top(tx_buffer[5]) : seg5_pattern;
+    assign s6 = switch_0 ? char_to_seg_top(tx_buffer[6]) : seg6_pattern;
+    assign s7 = switch_0 ? char_to_seg_top(tx_buffer[7]) : seg7_pattern;
+
     seven_segment_8_driver seg_driver(
         .clk(clk),
         .rst(rst),
-        .seg0(seg0_pattern),
-        .seg1(seg1_pattern),
-        .seg2(seg2_pattern),
-        .seg3(seg3_pattern),
-        .seg4(seg4_pattern),
-        .seg5(seg5_pattern),
-        .seg6(seg6_pattern),
-        .seg7(seg7_pattern),
+        .seg0(s0),
+        .seg1(s1),
+        .seg2(s2),
+        .seg3(s3),
+        .seg4(s4),
+        .seg5(s5),
+        .seg6(s6),
+        .seg7(s7),
         .seg_out(seg_out),
         .seg_sel(seg_sel)
     );
