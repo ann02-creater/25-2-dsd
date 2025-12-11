@@ -1,43 +1,93 @@
 `timescale 1ns / 1ps
 //////////////////////////////////////////////////////////////////////////////////
-// Module: top
-// Description: Simplified top module for RISC-V CPU with instruction display
-//              - switch[0]: Select current PC instruction (0) or PC+4 instruction (1)
-//              - led[0]: Heartbeat LED showing CPU is running
-//              - 7-segment 8-digit: Display instruction mnemonic
+// Module: top.v
+// Project: RISC-V 5-Stage Pipeline Processor - Odd/Even Game
+// Author: 22400387 송해원
+//
+// Description:
+//   최상위 모듈. RISC-V CPU 코어와 I/O 장치들을 통합.
+//   
+// I/O 구성:
+//   - PS2 키보드: 숫자 입력 (0-9, Enter, Backspace)
+//   - 7-Segment Display: 입력 중인 숫자 표시 (8자리)
+//   - VGA: ODD/EVEN 결과 표시
+//   - LED[0]: Heartbeat (시스템 동작 확인)
+//   - LED[15:1]: 결과 표시 (홀수=ON, 짝수=OFF)
+//
+// Change History:
+//   2024.12.11 - PS2 + VGA 통합, UART 제거
 //////////////////////////////////////////////////////////////////////////////////
 
 module top(
-    input clk,
-    input rst,
-    input switch_0,          // Instruction select: 0=current PC, 1=PC+4
-    input uart_rx,
-    output uart_tx,
-    output led_heartbeat,    // Heartbeat LED
-    output [6:0] seg_out,    // 7-segment cathodes
-    output [7:0] seg_sel     // 7-segment anodes (8 digits)
+    // ===== 시스템 =====
+    input wire clk,              // 100 MHz 시스템 클럭
+    input wire rst,              // Active-Low 리셋 (CPU_RESET 버튼)
+    
+    // ===== 스위치 =====
+    input wire switch_0,         // 7-Segment 모드 선택 (0: 숫자, 1: PC)
+    
+    // ===== PS2 키보드 =====
+    input wire ps2_clk,          // PS2 클럭
+    input wire ps2_data,         // PS2 데이터
+    
+    // ===== VGA =====
+    output wire vga_hsync,       // Horizontal sync
+    output wire vga_vsync,       // Vertical sync
+    output wire [3:0] vga_r,     // Red
+    output wire [3:0] vga_g,     // Green
+    output wire [3:0] vga_b,     // Blue
+    
+    // ===== 7-Segment =====
+    output wire [6:0] seg_out,   // Cathodes (a-g)
+    output wire [7:0] seg_sel,   // Anodes (8 digits)
+    
+    // ===== LED =====
+    output wire led_heartbeat,   // LED[0]: Heartbeat
+    output wire [15:0] led       // LED[15:1]: 결과 표시
 );
 
-    // Internal signals from data_path
-    wire [31:0] inst_out;
-    wire [31:0] PC;
-    wire [15:0] led_reg;  // Not used externally, but kept for data_path
-    wire [7:0]  tx_data;
-    wire        tx_we;
-    wire        rx_re;
-    wire [7:0]  rx_data;
-    wire        rx_valid;
-    wire        tx_busy;
+    // =========================================================================
+    // 내부 신호
+    // =========================================================================
     
-    // Debug signals (not used in simplified version, but kept for data_path compatibility)
+    // CPU 신호
+    wire [31:0] inst_out, PC;
+    wire [15:0] led_reg;
+    
+    // UART 관련 (기존 호환용, 미사용)
+    wire [7:0] tx_data;
+    wire tx_we, rx_re;
+    wire [7:0] rx_data = 8'h00;
+    wire rx_valid = 1'b0;
+    wire tx_busy = 1'b0;
+    
+    // PS2 키보드 신호
+    wire [7:0] ps2_scancode;
+    wire ps2_released;
+    wire ps2_key_pressed;
+    wire ps2_err;
+    
+    // 숫자 버퍼 신호
+    wire [31:0] input_number;
+    wire number_valid;
+    wire [3:0] digit0, digit1, digit2, digit3, digit4, digit5, digit6, digit7;
+    
+    // VGA 신호
+    wire [9:0] pixel_x, pixel_y;
+    wire video_on, pixel_clk;
+    wire [1:0] vga_result;       // CPU → VGA (MMIO)
+    
+    // CPU 디버그 신호 (data_path 호환용)
     wire branch, mem_read, mem_to_reg, mem_write, alu_src, reg_write;
     wire [1:0] alu_op;
     wire z_flag;
     wire [4:0] alu_ctrl_out;
     wire [31:0] PC_inc, PC_gen_out, PC_in;
     wire [31:0] data_read_1, data_read_2, write_data, imm_out, shift, alu_mux, alu_out, data_mem_out;
-
-    // Instantiate data_path (RISC-V pipeline CPU core)
+    
+    // =========================================================================
+    // CPU Core (data_path)
+    // =========================================================================
     data_path dp(
         .clk(clk),
         .rst(rst),
@@ -64,132 +114,143 @@ module top(
         .alu_out_ext(alu_out),
         .data_mem_out_ext(data_mem_out),
         .led_reg_out(led_reg),
+        // UART (미사용, 호환용)
         .uart_tx_data_out(tx_data),
         .uart_tx_we_out(tx_we),
         .uart_rx_re_out(rx_re),
         .uart_rx_data_in(rx_data),
         .uart_rx_valid_in(rx_valid),
-        .uart_tx_busy_in(tx_busy)
+        .uart_tx_busy_in(tx_busy),
+        // PS2 Keyboard (새로 추가)
+        .ps2_scancode_in(ps2_scancode),
+        .ps2_key_pressed_in(ps2_key_pressed),
+        // Number Buffer (새로 추가)
+        .num_buffer_in(input_number),
+        .num_valid_in(number_valid),
+        // VGA Result (새로 추가)
+        .vga_result_out(vga_result)
     );
-
-    // Instantiate UART
-    uart u_uart(
+    
+    // =========================================================================
+    // PS2 Keyboard Controller
+    // =========================================================================
+    ps2_kbd_top ps2_kbd(
         .clk(clk),
-        .resetn(!rst),
-        .ser_tx(uart_tx),
-        .ser_rx(uart_rx),
-        .cfg_divider(16'd868),  // 115200 baud @ 100MHz
-        .reg_dat_di(tx_data),
-        .reg_dat_do(rx_data),
-        .reg_dat_we(tx_we),
-        .reg_dat_re(rx_re),
-        .tx_busy(tx_busy),
-        .rx_valid(rx_valid)
+        .rst(!rst),  // ps2_kbd_top은 active-high reset 사용
+        .ps2clk(ps2_clk),
+        .ps2data(ps2_data),
+        .scancode(ps2_scancode),
+        .Released(ps2_released),
+        .err_ind(ps2_err)
     );
-
-    // Instruction selection: current PC or PC+4
-    // Note: PC+4 instruction needs to be read from BRAM
-    wire [31:0] pc_plus_4 = PC + 4;
-    wire [31:0] display_inst;
     
-    // For simplicity, we'll display current instruction when switch_0=0
-    // and show PC+4 value (not instruction) when switch_0=1
-    // To show actual PC+4 instruction would require additional BRAM read port
-    assign display_inst = switch_0 ? {pc_plus_4[15:0], 16'h0000} : inst_out;
-
-    // Instruction decoder: converts instruction to 7-segment patterns
-    wire [6:0] seg0_pattern, seg1_pattern, seg2_pattern, seg3_pattern;
-    wire [6:0] seg4_pattern, seg5_pattern, seg6_pattern, seg7_pattern;
-    
-    inst_decoder decoder(
-        .instruction(display_inst),
-        .seg0(seg0_pattern),
-        .seg1(seg1_pattern),
-        .seg2(seg2_pattern),
-        .seg3(seg3_pattern),
-        .seg4(seg4_pattern),
-        .seg5(seg5_pattern),
-        .seg6(seg6_pattern),
-        .seg7(seg7_pattern)
-    );
-
-    // 7-segment driver: multiplexes 8 digits
-    
-    // --- DEBUG FEATURE: Capture and display generic UART TX data on 7-segment ---
-    reg [7:0] tx_buffer [7:0]; // 8-character buffer
-    integer i;
-    
+    // 키 눌림 감지 (released의 falling edge = 키 눌림)
+    reg ps2_released_d;
     always @(posedge clk) begin
-        if (rst) begin
-            for(i=0; i<8; i=i+1) tx_buffer[i] <= 8'h20; // Initialize with spaces
-        end else if (tx_we) begin
-            // Shift left and insert new char at right (Index 0 is rightmost digit in our logic)
-            // But for display reading left-to-right (Seg7..Seg0), usually Seg7 is left.
-            // Let's shift such that new char enters at Seg0 (Right) and scrolls to Seg7 (Left).
-            // So tx_buffer[0] = new_char, tx_buffer[1] = old_buffer[0]...
-            tx_buffer[0] <= tx_data;
-            for(i=1; i<8; i=i+1) tx_buffer[i] <= tx_buffer[i-1];
-        end
+        if (!rst)
+            ps2_released_d <= 1'b1;
+        else
+            ps2_released_d <= ps2_released;
     end
-
-    // ASCII to 7-segment decoding function
-    function [6:0] char_to_seg_top;
-        input [7:0] c;
+    assign ps2_key_pressed = ps2_released_d && !ps2_released;  // Falling edge
+    
+    // =========================================================================
+    // Number Input Buffer
+    // =========================================================================
+    number_input_buffer num_buf(
+        .clk(clk),
+        .rst(!rst),
+        .scancode(ps2_scancode),
+        .key_pressed(ps2_key_pressed),
+        .cpu_read_ack(1'b0),  // TODO: CPU에서 읽음 신호 연결
+        .number(input_number),
+        .number_valid(number_valid),
+        .digit0(digit0),
+        .digit1(digit1),
+        .digit2(digit2),
+        .digit3(digit3),
+        .digit4(digit4),
+        .digit5(digit5),
+        .digit6(digit6),
+        .digit7(digit7)
+    );
+    
+    // =========================================================================
+    // VGA Controller
+    // =========================================================================
+    vga_controller vga_ctrl(
+        .clk(clk),
+        .reset(!rst),
+        .hsync(vga_hsync),
+        .vsync(vga_vsync),
+        .video_on(video_on),
+        .pixel_clk(pixel_clk),
+        .pixel_x(pixel_x),
+        .pixel_y(pixel_y)
+    );
+    
+    // =========================================================================
+    // VGA Text Display (ODD/EVEN)
+    // =========================================================================
+    vga_text_display vga_text(
+        .clk(clk),
+        .rst(!rst),
+        .pixel_x(pixel_x),
+        .pixel_y(pixel_y),
+        .video_on(video_on),
+        .result(vga_result),
+        .vga_r(vga_r),
+        .vga_g(vga_g),
+        .vga_b(vga_b)
+    );
+    
+    // =========================================================================
+    // 7-Segment Display
+    // =========================================================================
+    // BCD to 7-segment 변환 함수
+    function [6:0] bcd_to_seg;
+        input [3:0] bcd;
         begin
-            case (c)
-                "0": char_to_seg_top = 7'b1000000;
-                "1": char_to_seg_top = 7'b1111001;
-                "2": char_to_seg_top = 7'b0100100;
-                "3": char_to_seg_top = 7'b0110000;
-                "4": char_to_seg_top = 7'b0011001;
-                "5": char_to_seg_top = 7'b0010010;
-                "6": char_to_seg_top = 7'b0000010;
-                "7": char_to_seg_top = 7'b1111000;
-                "8": char_to_seg_top = 7'b0000000;
-                "9": char_to_seg_top = 7'b0010000;
-                "A": char_to_seg_top = 7'b0001000; "a": char_to_seg_top = 7'b0001000;
-                "B": char_to_seg_top = 7'b0000011; "b": char_to_seg_top = 7'b0000011;
-                "C": char_to_seg_top = 7'b1000110; "c": char_to_seg_top = 7'b1000110;
-                "D": char_to_seg_top = 7'b0100001; "d": char_to_seg_top = 7'b0100001;
-                "E": char_to_seg_top = 7'b0000110; "e": char_to_seg_top = 7'b0000110;
-                "F": char_to_seg_top = 7'b0001110; "f": char_to_seg_top = 7'b0001110;
-                "G": char_to_seg_top = 7'b0010000; "g": char_to_seg_top = 7'b0010000;
-                "H": char_to_seg_top = 7'b0001001; "h": char_to_seg_top = 7'b0001001;
-                "I": char_to_seg_top = 7'b1111001; "i": char_to_seg_top = 7'b1111001;
-                "J": char_to_seg_top = 7'b1100001; "j": char_to_seg_top = 7'b1100001;
-                "L": char_to_seg_top = 7'b1000111; "l": char_to_seg_top = 7'b1000111;
-                "N": char_to_seg_top = 7'b0000000; "n": char_to_seg_top = 7'b1101010; // n
-                "O": char_to_seg_top = 7'b1000000; "o": char_to_seg_top = 7'b0100011; // o
-                "P": char_to_seg_top = 7'b0001100; "p": char_to_seg_top = 7'b0001100;
-                "Q": char_to_seg_top = 7'b0011000; "q": char_to_seg_top = 7'b0011000;
-                "R": char_to_seg_top = 7'b0001000; "r": char_to_seg_top = 7'b0101111;
-                "S": char_to_seg_top = 7'b0010010; "s": char_to_seg_top = 7'b0010010;
-                "T": char_to_seg_top = 7'b0000111; "t": char_to_seg_top = 7'b0000111;
-                "U": char_to_seg_top = 7'b1000001; "u": char_to_seg_top = 7'b0011100; // u
-                "V": char_to_seg_top = 7'b0011100; "v": char_to_seg_top = 7'b0011100; // u looks like v
-                "Y": char_to_seg_top = 7'b0010001; "y": char_to_seg_top = 7'b0010001;
-                "-": char_to_seg_top = 7'b0111111;
-                "=": char_to_seg_top = 7'b0110111; // double dash approx
-                default: char_to_seg_top = 7'b1111111; // blank
+            case (bcd)
+                4'd0: bcd_to_seg = 7'b1000000;
+                4'd1: bcd_to_seg = 7'b1111001;
+                4'd2: bcd_to_seg = 7'b0100100;
+                4'd3: bcd_to_seg = 7'b0110000;
+                4'd4: bcd_to_seg = 7'b0011001;
+                4'd5: bcd_to_seg = 7'b0010010;
+                4'd6: bcd_to_seg = 7'b0000010;
+                4'd7: bcd_to_seg = 7'b1111000;
+                4'd8: bcd_to_seg = 7'b0000000;
+                4'd9: bcd_to_seg = 7'b0010000;
+                default: bcd_to_seg = 7'b1111111;  // Blank
             endcase
         end
     endfunction
     
-    // Select between Instruction Decoder (switch=0) and TX Buffer (switch=1)
-    wire [6:0] s0, s1, s2, s3, s4, s5, s6, s7;
+    // 7-Segment 패턴 생성
+    wire [6:0] seg0_pattern = bcd_to_seg(digit0);
+    wire [6:0] seg1_pattern = bcd_to_seg(digit1);
+    wire [6:0] seg2_pattern = bcd_to_seg(digit2);
+    wire [6:0] seg3_pattern = bcd_to_seg(digit3);
+    wire [6:0] seg4_pattern = bcd_to_seg(digit4);
+    wire [6:0] seg5_pattern = bcd_to_seg(digit5);
+    wire [6:0] seg6_pattern = bcd_to_seg(digit6);
+    wire [6:0] seg7_pattern = bcd_to_seg(digit7);
     
-    assign s0 = switch_0 ? char_to_seg_top(tx_buffer[0]) : seg0_pattern;
-    assign s1 = switch_0 ? char_to_seg_top(tx_buffer[1]) : seg1_pattern;
-    assign s2 = switch_0 ? char_to_seg_top(tx_buffer[2]) : seg2_pattern;
-    assign s3 = switch_0 ? char_to_seg_top(tx_buffer[3]) : seg3_pattern;
-    assign s4 = switch_0 ? char_to_seg_top(tx_buffer[4]) : seg4_pattern;
-    assign s5 = switch_0 ? char_to_seg_top(tx_buffer[5]) : seg5_pattern;
-    assign s6 = switch_0 ? char_to_seg_top(tx_buffer[6]) : seg6_pattern;
-    assign s7 = switch_0 ? char_to_seg_top(tx_buffer[7]) : seg7_pattern;
-
+    // Leading zero suppression (선행 0 제거)
+    wire [6:0] s7 = (digit7 == 0) ? 7'b1111111 : seg7_pattern;
+    wire [6:0] s6 = (digit7 == 0 && digit6 == 0) ? 7'b1111111 : seg6_pattern;
+    wire [6:0] s5 = (digit7 == 0 && digit6 == 0 && digit5 == 0) ? 7'b1111111 : seg5_pattern;
+    wire [6:0] s4 = (digit7 == 0 && digit6 == 0 && digit5 == 0 && digit4 == 0) ? 7'b1111111 : seg4_pattern;
+    wire [6:0] s3 = (digit7 == 0 && digit6 == 0 && digit5 == 0 && digit4 == 0 && digit3 == 0) ? 7'b1111111 : seg3_pattern;
+    wire [6:0] s2 = (digit7 == 0 && digit6 == 0 && digit5 == 0 && digit4 == 0 && digit3 == 0 && digit2 == 0) ? 7'b1111111 : seg2_pattern;
+    wire [6:0] s1 = (digit7 == 0 && digit6 == 0 && digit5 == 0 && digit4 == 0 && digit3 == 0 && digit2 == 0 && digit1 == 0) ? 7'b1111111 : seg1_pattern;
+    wire [6:0] s0 = seg0_pattern;  // 일의 자리는 항상 표시
+    
+    // 7-Segment Driver
     seven_segment_8_driver seg_driver(
         .clk(clk),
-        .rst(rst),
+        .rst(!rst),
         .seg0(s0),
         .seg1(s1),
         .seg2(s2),
@@ -201,16 +262,24 @@ module top(
         .seg_out(seg_out),
         .seg_sel(seg_sel)
     );
-
-    // Heartbeat LED: toggles ~0.75Hz to show CPU is running
+    
+    // =========================================================================
+    // Heartbeat LED (시스템 동작 확인)
+    // =========================================================================
     reg [25:0] heartbeat_counter;
+    
     always @(posedge clk) begin
-        if (rst)
-            heartbeat_counter <= 0;
+        if (!rst)
+            heartbeat_counter <= 26'd0;
         else
-            heartbeat_counter <= heartbeat_counter + 1;
+            heartbeat_counter <= heartbeat_counter + 1'b1;
     end
     
-    assign led_heartbeat = heartbeat_counter[25];
+    assign led_heartbeat = heartbeat_counter[25];  // ~0.75 Hz
+    
+    // =========================================================================
+    // LED 출력 (CPU 제어)
+    // =========================================================================
+    assign led = led_reg;
 
 endmodule
