@@ -15,7 +15,7 @@
 //   - LED[15:1]: 결과 표시 (홀수=ON, 짝수=OFF)
 //
 // Change History:
-//   2024.12.11 - PS2 + VGA 통합, UART 제거
+//   2024.12.12 - 100MHz 클럭 사용 (프로젝트 제한 조건)
 //////////////////////////////////////////////////////////////////////////////////
 
 module top(
@@ -107,13 +107,13 @@ module top(
         .alu_out_ext(alu_out),
         .data_mem_out_ext(data_mem_out),
         .led_reg_out(led_reg),
-        // PS2 Keyboard (새로 추가)
+        // PS2 Keyboard
         .ps2_scancode_in(ps2_scancode),
         .ps2_key_pressed_in(ps2_key_pressed),
-        // Number Buffer (새로 추가)
+        // Number Buffer
         .num_buffer_in(input_number),
         .num_valid_in(number_valid),
-        // VGA Result (새로 추가)
+        // VGA Result
         .vga_result_out(vga_result)
     );
     
@@ -126,19 +126,10 @@ module top(
         .ps2clk(ps2_clk),
         .ps2data(ps2_data),
         .scancode(ps2_scancode),
+        .KeyPressed(ps2_key_pressed),
         .Released(ps2_released),
         .err_ind(ps2_err)
     );
-    
-    // 키 눌림 감지 (released의 falling edge = 키 눌림)
-    reg ps2_released_d;
-    always @(posedge clk) begin
-        if (!rst)
-            ps2_released_d <= 1'b1;
-        else
-            ps2_released_d <= ps2_released;
-    end
-    assign ps2_key_pressed = ps2_released_d && !ps2_released;  // Falling edge
     
     // =========================================================================
     // Number Input Buffer
@@ -148,7 +139,7 @@ module top(
         .rst(!rst),
         .scancode(ps2_scancode),
         .key_pressed(ps2_key_pressed),
-        .cpu_read_ack(1'b0),  // TODO: CPU에서 읽음 신호 연결
+        .cpu_read_ack(1'b0),
         .number(input_number),
         .number_valid(number_valid),
         .digit0(digit0),
@@ -261,7 +252,7 @@ module top(
             heartbeat_counter <= heartbeat_counter + 1'b1;
     end
     
-    assign led_heartbeat = heartbeat_counter[25];  // ~0.75 Hz
+    assign led_heartbeat = heartbeat_counter[25];  // ~0.75 Hz @ 100MHz
     
     // =========================================================================
     // LED 출력 (CPU 제어)

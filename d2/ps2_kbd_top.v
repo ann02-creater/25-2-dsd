@@ -6,9 +6,11 @@
 //
 // Description:
 //   PS2 키보드 최상위 모듈. ps2_kbd_new와 debounce_pulse를 통합.
+//   KeyPressed: 키가 눌릴 때 1클럭 펄스 (숫자 입력용)
+//   Released: 키가 떨어질 때 1클럭 펄스
 //
 // Change History:
-//   2024.12.11 - Lab 자료 기반으로 통합
+//   2024.12.12 - KeyPressed 출력 추가
 //////////////////////////////////////////////////////////////////////////////////
 
 module ps2_kbd_top(
@@ -17,7 +19,8 @@ module ps2_kbd_top(
     input ps2clk,
     input ps2data,
     output [7:0] scancode,
-    output Released,
+    output KeyPressed,       // 키 눌림 (falling edge of released)
+    output Released,         // 키 떨어짐 (rising edge of released)
     output err_ind
 );
 
@@ -35,13 +38,24 @@ ps2_kbd_new ps2 (
     .released(released_out), 
     .err_ind(err_ind)
 );
-	 
-ps2_debounce_pulse pulse (
+
+// Rising edge: 키 떨어짐
+debounce_pulse pulse_released (
     .clk(clk), 
     .rst(rst), 
     .Din(released_out), 
     .Dout(Released)
 );
+
+// Falling edge: 키 눌림 (released_out이 1→0)
+reg released_d;
+always @(posedge clk) begin
+    if (rst)
+        released_d <= 1'b1;
+    else
+        released_d <= released_out;
+end
+assign KeyPressed = released_d & ~released_out;  // Falling edge detection
 
 always @(posedge clk, posedge rst) begin
     if(rst == 1'b1)
@@ -53,3 +67,4 @@ always @(posedge clk, posedge rst) begin
 end
 
 endmodule
+

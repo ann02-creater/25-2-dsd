@@ -114,10 +114,10 @@ module pipeline_registers(
     // =========================================================================
     register #(64) IF_ID (
         .clk(clk),
-        .d({PC_in, inst_in}),
+        .in({PC_in, inst_in}),
         .rst(rst),
         .load(~stall),
-        .q({IF_ID_PC, IF_ID_Inst})
+        .out({IF_ID_PC, IF_ID_Inst})
     );
 
     // =========================================================================
@@ -125,7 +125,7 @@ module pipeline_registers(
     // =========================================================================
     register #(160) ID_EX (
         .clk(clk),
-        .d({
+        .in({
             real_reg_write,
             real_mem_to_reg,
             real_can_branch,
@@ -149,7 +149,7 @@ module pipeline_registers(
         }), 
         .rst(rst),
         .load(1'b1),
-        .q({
+        .out({
             ID_EX_reg_write,
             ID_EX_mem_to_reg,
             ID_EX_can_branch,
@@ -177,7 +177,7 @@ module pipeline_registers(
     // =========================================================================
     register #(115) EX_MEM (
         .clk(clk),
-        .d({
+        .in({
             ID_EX_reg_write,
             ID_EX_mem_to_reg,
             ID_EX_can_branch,
@@ -197,7 +197,7 @@ module pipeline_registers(
         }),
         .rst(rst),
         .load(1'b1),
-        .q({
+        .out({
             EX_MEM_reg_write,
             EX_MEM_mem_to_reg,
             EX_MEM_can_branch,
@@ -219,7 +219,7 @@ module pipeline_registers(
     // =========================================================================
     register #(72) MEM_WB (
         .clk(clk),
-        .d({
+        .in({
             EX_MEM_reg_write,
             EX_MEM_mem_to_reg,
             EX_MEM_sys,
@@ -229,7 +229,7 @@ module pipeline_registers(
         }),
         .rst(rst),
         .load(1'b1),
-        .q({
+        .out({
             MEM_WB_reg_write,
             MEM_WB_mem_to_reg,
             MEM_WB_sys,

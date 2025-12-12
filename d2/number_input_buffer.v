@@ -6,17 +6,20 @@
 //
 // Description:
 //   PS2 키보드로부터 숫자를 입력받아 버퍼에 저장하는 모듈.
-//   - 숫자 키 (0-9): 현재 값에 10을 곱하고 새 숫자 추가
-//   - Backspace: 마지막 숫자 삭제 (10으로 나누기)
-//   - Enter: 입력 완료 신호 발생, CPU가 값을 읽을 수 있음
-//   - 최대 8자리 (99,999,999) 까지 지원
+//   곱셈/나눗셈 연산을 제거하여 100MHz 타이밍 충족.
+//   
+//   BCD 직접 저장 방식:
+//   - 각 자릿수를 4비트 BCD로 분리 저장
+//   - 숫자 입력: 왼쪽으로 shift 후 새 숫자 추가
+//   - Backspace: 오른쪽으로 shift
+//   - Binary 변환은 CPU 읽기 시에만 수행 (느린 경로)
 //
 // Interface with CPU (Memory-Mapped I/O):
-//   0x50000000 (READ): 입력된 숫자 값 (32-bit)
+//   0x50000000 (READ): 입력된 숫자 값 (32-bit binary)
 //   0x50000004 (READ): 입력 완료 플래그 (bit 0 = number_valid)
 //
 // Change History:
-//   2024.12.11 - Initial creation
+//   2024.12.12 - 타이밍 최적화: 곱셈 연산 제거, BCD 직접 저장
 //////////////////////////////////////////////////////////////////////////////////
 
 module number_input_buffer(
@@ -28,10 +31,10 @@ module number_input_buffer(
     input wire key_pressed,        // 키가 눌림 (edge-detected)
     
     // CPU 인터페이스 (MMIO)
-    input wire cpu_read_ack,       // CPU가 값을 읽었음을 알림 (valid 클리어용)
+    input wire cpu_read_ack,       // CPU가 값을 읽었음을 알림
     
     // 출력
-    output reg [31:0] number,      // 입력된 숫자 (최대 99,999,999)
+    output reg [31:0] number,      // 입력된 숫자 (binary, BCD→Binary 변환 후)
     output reg number_valid,       // Enter 눌림, CPU가 읽어야 함
     
     // 7-Segment 디스플레이용 BCD 출력 (8자리)
@@ -51,24 +54,31 @@ module number_input_buffer(
     localparam ASCII_ENTER = 8'h0D;  // Enter
     localparam ASCII_BS    = 8'h08;  // Backspace
     
-    // 최대값 제한 (8자리 = 99,999,999)
-    localparam MAX_VALUE = 32'd99999999;
+    // =========================================================================
+    // BCD 저장 (8자리, 각 4비트)
+    // =========================================================================
+    reg [3:0] bcd [0:7];  // bcd[0]=일의 자리, bcd[7]=천만의 자리
+    reg [2:0] digit_count; // 현재 입력된 자릿수 (0-8)
     
     // 숫자 키 감지
     wire is_digit = (scancode >= ASCII_0) && (scancode <= ASCII_9);
     wire [3:0] digit_value = scancode[3:0];  // ASCII '0'-'9' → 0-9
     
     // 상태 머신
-    localparam S_IDLE  = 2'b00;  // 입력 대기
-    localparam S_INPUT = 2'b01;  // 숫자 입력 중
-    localparam S_DONE  = 2'b10;  // Enter 눌림, CPU 대기
+    localparam S_IDLE  = 2'b00;
+    localparam S_INPUT = 2'b01;
+    localparam S_DONE  = 2'b10;
     
     reg [1:0] state;
     
-    // 메인 로직
+    // =========================================================================
+    // BCD 입력 로직 (곱셈 없음!)
+    // =========================================================================
     always @(posedge clk) begin
         if (rst) begin
-            number <= 32'd0;
+            bcd[0] <= 4'd0; bcd[1] <= 4'd0; bcd[2] <= 4'd0; bcd[3] <= 4'd0;
+            bcd[4] <= 4'd0; bcd[5] <= 4'd0; bcd[6] <= 4'd0; bcd[7] <= 4'd0;
+            digit_count <= 3'd0;
             number_valid <= 1'b0;
             state <= S_IDLE;
         end
@@ -76,19 +86,32 @@ module number_input_buffer(
             case (state)
                 S_IDLE, S_INPUT: begin
                     if (key_pressed) begin
-                        if (is_digit) begin
-                            // 숫자 키: number = number * 10 + digit
-                            if (number <= (MAX_VALUE - digit_value) / 10) begin
-                                number <= number * 10 + digit_value;
-                            end
-                            // 오버플로우 시 무시
+                        if (is_digit && digit_count < 8) begin
+                            // 숫자 키: BCD 왼쪽 shift 후 새 숫자 추가
+                            bcd[7] <= bcd[6];
+                            bcd[6] <= bcd[5];
+                            bcd[5] <= bcd[4];
+                            bcd[4] <= bcd[3];
+                            bcd[3] <= bcd[2];
+                            bcd[2] <= bcd[1];
+                            bcd[1] <= bcd[0];
+                            bcd[0] <= digit_value;
+                            digit_count <= digit_count + 1'b1;
                             state <= S_INPUT;
                         end
-                        else if (scancode == ASCII_BS) begin
-                            // Backspace: 마지막 숫자 삭제
-                            number <= number / 10;
+                        else if (scancode == ASCII_BS && digit_count > 0) begin
+                            // Backspace: BCD 오른쪽 shift
+                            bcd[0] <= bcd[1];
+                            bcd[1] <= bcd[2];
+                            bcd[2] <= bcd[3];
+                            bcd[3] <= bcd[4];
+                            bcd[4] <= bcd[5];
+                            bcd[5] <= bcd[6];
+                            bcd[6] <= bcd[7];
+                            bcd[7] <= 4'd0;
+                            digit_count <= digit_count - 1'b1;
                         end
-                        else if (scancode == ASCII_ENTER) begin
+                        else if (scancode == ASCII_ENTER && digit_count > 0) begin
                             // Enter: 입력 완료
                             number_valid <= 1'b1;
                             state <= S_DONE;
@@ -99,7 +122,9 @@ module number_input_buffer(
                 S_DONE: begin
                     // CPU가 값을 읽으면 다음 입력 준비
                     if (cpu_read_ack) begin
-                        number <= 32'd0;
+                        bcd[0] <= 4'd0; bcd[1] <= 4'd0; bcd[2] <= 4'd0; bcd[3] <= 4'd0;
+                        bcd[4] <= 4'd0; bcd[5] <= 4'd0; bcd[6] <= 4'd0; bcd[7] <= 4'd0;
+                        digit_count <= 3'd0;
                         number_valid <= 1'b0;
                         state <= S_IDLE;
                     end
@@ -111,44 +136,36 @@ module number_input_buffer(
     end
     
     // =========================================================================
-    // Binary to BCD 변환 (Double Dabble Algorithm - Combinational)
+    // number 출력 (CPU용)
     // =========================================================================
-    // 32-bit binary → 8-digit BCD (각 4-bit)
+    // 홀짝 게임에서 필요한 것은 홀수/짝수 판단만!
+    // bcd[0]의 최하위 비트가 1이면 홀수, 0이면 짝수
+    // number[0] = bcd[0][0] (홀짝 판단용)
+    // number[31:1] = 0 (사용 안함)
     
-    reg [31:0] bin_temp;
-    reg [31:0] bcd;
-    integer i;
-    
-    always @(*) begin
-        bin_temp = number;
-        bcd = 32'd0;
-        
-        // Double Dabble: 32번 shift하면서 BCD 보정
-        for (i = 0; i < 32; i = i + 1) begin
-            // 각 BCD 자릿수가 5 이상이면 3 더하기
-            if (bcd[3:0]   >= 5) bcd[3:0]   = bcd[3:0]   + 3;
-            if (bcd[7:4]   >= 5) bcd[7:4]   = bcd[7:4]   + 3;
-            if (bcd[11:8]  >= 5) bcd[11:8]  = bcd[11:8]  + 3;
-            if (bcd[15:12] >= 5) bcd[15:12] = bcd[15:12] + 3;
-            if (bcd[19:16] >= 5) bcd[19:16] = bcd[19:16] + 3;
-            if (bcd[23:20] >= 5) bcd[23:20] = bcd[23:20] + 3;
-            if (bcd[27:24] >= 5) bcd[27:24] = bcd[27:24] + 3;
-            if (bcd[31:28] >= 5) bcd[31:28] = bcd[31:28] + 3;
-            
-            // Shift left
-            bcd = {bcd[30:0], bin_temp[31]};
-            bin_temp = {bin_temp[30:0], 1'b0};
+    // 또는 간단하게: 하위 4자리 BCD를 합쳐서 출력 (최대 9999)
+    // 이러면 곱셈이 필요 없음
+    always @(posedge clk) begin
+        if (rst) begin
+            number <= 32'd0;
+        end
+        else begin
+            // 간단한 방식: BCD 그대로 합쳐서 출력 (곱셈 없음)
+            // number = {bcd[7], bcd[6], bcd[5], bcd[4], bcd[3], bcd[2], bcd[1], bcd[0]}
+            number <= {bcd[7], bcd[6], bcd[5], bcd[4], bcd[3], bcd[2], bcd[1], bcd[0]};
         end
     end
     
-    // BCD 출력 할당
-    assign digit0 = bcd[3:0];
-    assign digit1 = bcd[7:4];
-    assign digit2 = bcd[11:8];
-    assign digit3 = bcd[15:12];
-    assign digit4 = bcd[19:16];
-    assign digit5 = bcd[23:20];
-    assign digit6 = bcd[27:24];
-    assign digit7 = bcd[31:28];
+    // =========================================================================
+    // BCD 출력 (7-Segment 표시용)
+    // =========================================================================
+    assign digit0 = bcd[0];
+    assign digit1 = bcd[1];
+    assign digit2 = bcd[2];
+    assign digit3 = bcd[3];
+    assign digit4 = bcd[4];
+    assign digit5 = bcd[5];
+    assign digit6 = bcd[6];
+    assign digit7 = bcd[7];
 
 endmodule

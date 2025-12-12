@@ -48,8 +48,8 @@ module pc_logic(
     ripple pc_inc (
         .a(PC),
         .b(inst[1:0] ? 32'd4 : 32'd2),
-        .sum(pc_inc_out),
-        .carry_out(dummy_carry_2)
+        .out(pc_inc_out),
+        .cout(dummy_carry_2)
     );
     
     // =========================================================================
@@ -58,8 +58,8 @@ module pc_logic(
     ripple pc_gen (
         .a(IF_ID_PC),
         .b(imm),
-        .sum(pc_gen_out),
-        .carry_out(dummy_carry)
+        .out(pc_gen_out),
+        .cout(dummy_carry)
     );
     
     // =========================================================================
@@ -88,10 +88,10 @@ module pc_logic(
     // =========================================================================
     register #(32) program_counter (
         .clk(clk),
-        .d(final_pc),
+        .in(final_pc),
         .rst(rst),
         .load(~stall),
-        .q(PC_out)
+        .out(PC_out)
     );
 
 endmodule
