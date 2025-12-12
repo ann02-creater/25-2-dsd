@@ -47,6 +47,22 @@ module top(
 );
 
     // =========================================================================
+    // Clocking Wizard (100 MHz → 50 MHz for CPU)
+    // =========================================================================
+    wire clk_cpu;           // 50 MHz CPU 클럭
+    wire clk_locked;        // PLL 잠금 신호
+    
+    clk_wiz_0 clk_gen (
+        .clk_in1(clk),      // 100 MHz 입력
+        .clk_out1(clk_cpu), // 50 MHz 출력 (CPU용)
+        .reset(~rst),       // Active-high reset
+        .locked(clk_locked)
+    );
+    
+    // 시스템 리셋: 외부 리셋 OR PLL 미잠금
+    wire sys_rst = rst & clk_locked;
+
+    // =========================================================================
     // 내부 신호
     // =========================================================================
     
@@ -82,8 +98,8 @@ module top(
     // CPU Core (data_path)
     // =========================================================================
     data_path dp(
-        .clk(clk),
-        .rst(rst),
+        .clk(clk_cpu),
+        .rst(sys_rst),
         .inst_out_ext(inst_out),
         .branch_ext(branch),
         .mem_read_ext(mem_read),
@@ -121,8 +137,8 @@ module top(
     // PS2 Keyboard Controller
     // =========================================================================
     ps2_kbd_top ps2_kbd(
-        .clk(clk),
-        .rst(!rst),  // ps2_kbd_top은 active-high reset 사용
+        .clk(clk_cpu),
+        .rst(!sys_rst),  // ps2_kbd_top은 active-high reset 사용
         .ps2clk(ps2_clk),
         .ps2data(ps2_data),
         .scancode(ps2_scancode),
@@ -132,8 +148,8 @@ module top(
     
     // 키 눌림 감지 (released의 falling edge = 키 눌림)
     reg ps2_released_d;
-    always @(posedge clk) begin
-        if (!rst)
+    always @(posedge clk_cpu) begin
+        if (!sys_rst)
             ps2_released_d <= 1'b1;
         else
             ps2_released_d <= ps2_released;
@@ -144,8 +160,8 @@ module top(
     // Number Input Buffer
     // =========================================================================
     number_input_buffer num_buf(
-        .clk(clk),
-        .rst(!rst),
+        .clk(clk_cpu),
+        .rst(!sys_rst),
         .scancode(ps2_scancode),
         .key_pressed(ps2_key_pressed),
         .cpu_read_ack(1'b0),  // TODO: CPU에서 읽음 신호 연결
@@ -235,8 +251,8 @@ module top(
     
     // 7-Segment Driver
     seven_segment_8_driver seg_driver(
-        .clk(clk),
-        .rst(!rst),
+        .clk(clk_cpu),
+        .rst(!sys_rst),
         .seg0(s0),
         .seg1(s1),
         .seg2(s2),
@@ -252,16 +268,16 @@ module top(
     // =========================================================================
     // Heartbeat LED (시스템 동작 확인)
     // =========================================================================
-    reg [25:0] heartbeat_counter;
+    reg [24:0] heartbeat_counter;  // 50MHz로 변경으로 25비트로 조정
     
-    always @(posedge clk) begin
-        if (!rst)
-            heartbeat_counter <= 26'd0;
+    always @(posedge clk_cpu) begin
+        if (!sys_rst)
+            heartbeat_counter <= 25'd0;
         else
             heartbeat_counter <= heartbeat_counter + 1'b1;
     end
     
-    assign led_heartbeat = heartbeat_counter[25];  // ~0.75 Hz
+    assign led_heartbeat = heartbeat_counter[24];  // ~1.5 Hz @ 50MHz
     
     // =========================================================================
     // LED 출력 (CPU 제어)
