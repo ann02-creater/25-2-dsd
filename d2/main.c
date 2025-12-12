@@ -1,5 +1,5 @@
 /* main.c - 홀짝 게임 */
-#include <stdint.h>
+typedef unsigned int uint32_t;
 
 #define NUM_INPUT (*(volatile uint32_t *)0x50000000)
 #define NUM_VALID (*(volatile uint32_t *)0x50000004)

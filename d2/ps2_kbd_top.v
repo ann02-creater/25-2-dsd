@@ -36,7 +36,7 @@ ps2_kbd_new ps2 (
     .err_ind(err_ind)
 );
 	 
-debounce_pulse pulse (
+ps2_debounce_pulse pulse (
     .clk(clk), 
     .rst(rst), 
     .Din(released_out), 

@@ -20,7 +20,11 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 
-module multiplexer(input [31:0]a, input [31:0]b, input sel, output [31:0]out);
-    // 삼항 연산자로 최적화 - generate 루프보다 합성 시간 단축
+module multiplexer(
+input [31:0]a, 
+input [31:0]b, 
+input sel, 
+output [31:0]out);
+
     assign out = sel ? b : a;
 endmodule

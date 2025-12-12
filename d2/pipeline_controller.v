@@ -13,7 +13,6 @@
 //
 // Memory Map:
 //   0x00000000 ~ 0x0FFFFFFF : BRAM (Instruction & Data)
-//   0x10000000 ~ 0x1FFFFFFF : UART
 //   0x20000000 ~ 0x2FFFFFFF : LED
 //   0x30000000 ~ 0x3FFFFFFF : PS2 Keyboard
 //   0x40000000 ~ 0x4FFFFFFF : VGA Output
@@ -90,7 +89,6 @@ module mmio_decoder(
     input wire [31:0] addr,
     
     output wire is_bram,      // 0x00000000 ~ 0x0FFFFFFF
-    output wire is_uart,      // 0x10000000 ~ 0x1FFFFFFF
     output wire is_led,       // 0x20000000 ~ 0x2FFFFFFF
     output wire is_ps2,       // 0x30000000 ~ 0x3FFFFFFF
     output wire is_vga,       // 0x40000000 ~ 0x4FFFFFFF
@@ -101,12 +99,11 @@ module mmio_decoder(
     wire [3:0] addr_hi = addr[31:28];
     
     assign is_bram    = (addr_hi == 4'h0);
-    assign is_uart    = (addr_hi == 4'h1);
     assign is_led     = (addr_hi == 4'h2);
     assign is_ps2     = (addr_hi == 4'h3);
     assign is_vga     = (addr_hi == 4'h4);
     assign is_num_buf = (addr_hi == 4'h5);
     
-    assign is_mmio = is_uart | is_led | is_ps2 | is_vga | is_num_buf;
+    assign is_mmio = is_led | is_ps2 | is_vga | is_num_buf;
 
 endmodule

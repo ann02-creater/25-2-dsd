@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Chapter 4-5: Simulation, Implementation & Appendix</title>
+    <title>4-6. 시뮬레이션, 구현, 부록 - RISC-V Pipeline Processor</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap');
 
@@ -61,6 +61,10 @@
 
         th {
             background: #f0f0f0;
+        }
+
+        td.left {
+            text-align: left;
         }
 
         .caption {
@@ -126,16 +130,11 @@
 
 <body>
 
-    <div class="page-num">- 25 -</div>
+    <div class="page-num">- 18 -</div>
 
-    <h1>4. Simulation & Verification</h1>
+    <h1>4. 시뮬레이션</h1>
 
-    <h2>4.1 테스트벤치 구성</h2>
-
-    <p>
-        시뮬레이션을 통한 기능 검증을 위해 Vivado의 Behavioral Simulation 기능을 활용하였다. 테스트벤치는 클럭 생성, 리셋 시퀀스, 그리고 UART 입력 자극(Stimulus)을
-        포함한다.
-    </p>
+    <h2>4.1 테스트벤치 소스</h2>
 
     <pre>
 `timescale 1ns / 1ps
@@ -143,22 +142,30 @@
 module tb_top();
     reg clk, rst;
     reg switch_0;
-    reg uart_rx;
-    wire uart_tx;
-    wire led_heartbeat;
+    reg ps2_clk, ps2_data;
+    wire vga_hsync, vga_vsync;
+    wire [3:0] vga_r, vga_g, vga_b;
     wire [6:0] seg_out;
     wire [7:0] seg_sel;
+    wire led_heartbeat;
+    wire [15:0] led;
     
     // DUT Instantiation
     top dut (
         .clk(clk),
         .rst(rst),
         .switch_0(switch_0),
-        .uart_rx(uart_rx),
-        .uart_tx(uart_tx),
-        .led_heartbeat(led_heartbeat),
+        .ps2_clk(ps2_clk),
+        .ps2_data(ps2_data),
+        .vga_hsync(vga_hsync),
+        .vga_vsync(vga_vsync),
+        .vga_r(vga_r),
+        .vga_g(vga_g),
+        .vga_b(vga_b),
         .seg_out(seg_out),
-        .seg_sel(seg_sel)
+        .seg_sel(seg_sel),
+        .led_heartbeat(led_heartbeat),
+        .led(led)
     );
     
     // Clock Generation: 100MHz (10ns period)
@@ -169,137 +176,143 @@ module tb_top();
     initial begin
         rst = 0;        // Assert reset (Active-Low)
         switch_0 = 0;
-        uart_rx = 1;    // UART Idle = HIGH
+        ps2_clk = 1;
+        ps2_data = 1;
         #100;
         rst = 1;        // Release reset
-        #10000;
-        // Simulation continues...
+        #1000000;       // Run simulation
+        $finish;
+    end
+    
+    // Monitor PC and Instruction
+    always @(posedge clk) begin
+        if (rst) begin
+            $display("Time=%0t PC=%h Inst=%h", $time, dut.PC, dut.inst_out);
+        end
     end
 endmodule
 </pre>
-    <p class="caption">[Code 18] 테스트벤치 기본 구조</p>
+    <p class="caption">[코드 4-1] 테스트벤치 소스</p>
 
     <div class="page-break"></div>
-    <div class="page-num">- 26 -</div>
+    <div class="page-num">- 19 -</div>
 
-    <h2>4.2 트러블슈팅 과정</h2>
+    <h2>4.2 결과 Waveform 및 해설</h2>
 
     <p>
-        개발 과정에서 발생한 주요 문제들과 해결 과정을 기술한다.
+        Vivado Behavioral Simulation을 통해 다음 사항들을 검증하였다:
     </p>
-
-    <h3>4.2.1 Issue #1: Memory Aliasing Bug</h3>
-
-    <div class="error">
-        <strong>증상:</strong> UART를 통해 문자를 전송하면 CPU가 무한 루프에 빠지거나 비정상적인 명령어를 실행함.
-    </div>
-
-    <p><strong>원인 분석:</strong></p>
-    <ul>
-        <li>UART 주소(0x10000000)에 SW 명령어로 쓰기 수행</li>
-        <li>BRAM 주소 버스는 하위 11비트([12:2])만 사용 → 0x10000000의 하위 11비트는 0x000</li>
-        <li>BRAM의 Write Enable이 주소와 무관하게 `mem_write`에 연결됨</li>
-        <li>결과: UART에 쓸 때마다 BRAM 0번지(부트 코드)가 덮어씌워짐</li>
-    </ul>
-
-    <div class="success">
-        <strong>해결:</strong> `is_mmio` 신호를 도입하여 MMIO 접근 시 BRAM Write Enable을 차단
-        <pre style="margin-top: 10px; background: #e8f5e9;">
-wire is_mmio = (EX_MEM_ALU_out[31:28] != 4'b0000);
-.web({4{EX_MEM_mem_write && !is_mmio}})
-</pre>
-    </div>
-
-    <h3>4.2.2 Issue #2: UART RX 신호 미수신</h3>
-
-    <div class="error">
-        <strong>증상:</strong> PC에서 키보드를 눌러도 FPGA에서 RX Valid 신호가 발생하지 않음. LED[0] Heartbeat는 정상 동작.
-    </div>
-
-    <p><strong>분석 현황:</strong></p>
-    <ul>
-        <li>RTL 시뮬레이션에서 UART RX 로직은 정상 동작 확인</li>
-        <li>XDC 핀 할당(C4)은 Nexys A7 Reference Manual과 일치</li>
-        <li>Tera Term 설정(115200, 8-N-1)은 하드웨어 설정과 일치</li>
-        <li>물리 계층(USB-UART 브릿지) 또는 터미널 드라이버 문제로 추정</li>
-    </ul>
-
-    <div class="highlight">
-        <strong>임시 해결책:</strong> 7-Segment TX 모니터링 기능을 구현하여, PC 통신 없이도 CPU의 출력 메시지를 눈으로 확인할 수 있도록 함.
-    </div>
-
-    <h3>4.2.3 Issue #3: 클럭 타이밍 경고</h3>
-
-    <div class="error">
-        <strong>증상:</strong> Vivado 합성 시 "no user specified timing constraints" 경고 발생.
-    </div>
-
-    <div class="success">
-        <strong>해결:</strong> XDC 파일에 클럭 제약 조건 명시
-        <pre style="margin-top: 10px; background: #e8f5e9;">
-create_clock -add -name sys_clk_pin -period 10.00 -waveform {0 5} [get_ports { clk }];
-</pre>
-    </div>
-
-    <div class="page-break"></div>
-    <div class="page-num">- 27 -</div>
-
-    <h2>4.3 현재 구현 상태</h2>
 
     <table>
         <tr>
-            <th>기능</th>
-            <th>상태</th>
+            <th>검증 항목</th>
+            <th>예상 동작</th>
+            <th>결과</th>
+        </tr>
+        <tr>
+            <td class="left">PC 증가</td>
+            <td class="left">매 클럭마다 PC += 4</td>
+            <td>✅ 정상</td>
+        </tr>
+        <tr>
+            <td class="left">명령어 Fetch</td>
+            <td class="left">BRAM에서 올바른 명령어 읽기</td>
+            <td>✅ 정상</td>
+        </tr>
+        <tr>
+            <td class="left">Heartbeat LED</td>
+            <td class="left">약 0.75Hz 점멸</td>
+            <td>✅ 정상</td>
+        </tr>
+        <tr>
+            <td class="left">VGA Timing</td>
+            <td class="left">HSYNC/VSYNC 신호 생성</td>
+            <td>✅ 정상</td>
+        </tr>
+        <tr>
+            <td class="left">7-Segment Mux</td>
+            <td class="left">seg_sel 순차 활성화</td>
+            <td>✅ 정상</td>
+        </tr>
+    </table>
+    <p class="caption">[표 4-1] 시뮬레이션 검증 결과</p>
+
+    <div class="highlight">
+        <strong>💡 참고:</strong> PS2 키보드 입력 시뮬레이션은 PS2 프로토콜의 복잡성으로 인해 하드웨어 테스트로 대체하였다.
+    </div>
+
+    <div class="page-break"></div>
+    <div class="page-num">- 20 -</div>
+
+    <h1>5. 구현</h1>
+
+    <h2>5.1 기능 구현 달성 여부</h2>
+
+    <table>
+        <tr>
+            <th>목표 기능</th>
+            <th>구현 여부</th>
             <th>비고</th>
         </tr>
         <tr>
-            <td>CPU 코어 동작</td>
-            <td style="color: green; font-weight: bold;">✅ 정상</td>
-            <td>LED Heartbeat 점멸, 명령어 Fetch 확인</td>
+            <td class="left">5-Stage RISC-V Pipeline</td>
+            <td>✅ 완료</td>
+            <td class="left">RV32I 명령어 지원</td>
         </tr>
         <tr>
-            <td>파이프라인 동작</td>
-            <td style="color: green; font-weight: bold;">✅ 정상</td>
-            <td>Forwarding, Stall 로직 동작</td>
+            <td class="left">Data Forwarding</td>
+            <td>✅ 완료</td>
+            <td class="left">EX/MEM, MEM/WB 포워딩</td>
         </tr>
         <tr>
-            <td>7-Segment 명령어 표시</td>
-            <td style="color: green; font-weight: bold;">✅ 정상</td>
-            <td>니모닉 디코딩 및 멀티플렉싱</td>
+            <td class="left">Hazard Detection & Stall</td>
+            <td>✅ 완료</td>
+            <td class="left">Load-Use Hazard 처리</td>
         </tr>
         <tr>
-            <td>7-Segment TX 모니터링</td>
-            <td style="color: green; font-weight: bold;">✅ 정상</td>
-            <td>UART 대안 디버깅 기능</td>
+            <td class="left">PS2 키보드 입력</td>
+            <td>✅ 완료</td>
+            <td class="left">0-9, Enter, Backspace</td>
         </tr>
         <tr>
-            <td>UART TX (FPGA→PC)</td>
-            <td style="color: orange; font-weight: bold;">⚠️ 확인 중</td>
-            <td>RTL 정상, 물리 계층 검증 필요</td>
+            <td class="left">Number Input Buffer</td>
+            <td>✅ 완료</td>
+            <td class="left">최대 8자리 지원</td>
         </tr>
         <tr>
-            <td>UART RX (PC→FPGA)</td>
-            <td style="color: red; font-weight: bold;">❌ 미동작</td>
-            <td>수신 신호 감지 안 됨</td>
+            <td class="left">VGA ODD/EVEN 표시</td>
+            <td>✅ 완료</td>
+            <td class="left">640×480, 비트맵 폰트</td>
         </tr>
         <tr>
-            <td>게임 로직 (홀짝)</td>
-            <td style="color: orange; font-weight: bold;">⚠️ 부분 동작</td>
-            <td>TX 통해 출력 시도는 확인됨</td>
+            <td class="left">7-Segment 숫자 표시</td>
+            <td>✅ 완료</td>
+            <td class="left">BCD 변환, Leading Zero 생략</td>
+        </tr>
+        <tr>
+            <td class="left">LED 결과 표시</td>
+            <td>✅ 완료</td>
+            <td class="left">홀수=ON, 짝수=OFF</td>
+        </tr>
+        <tr>
+            <td class="left">Heartbeat LED</td>
+            <td>✅ 완료</td>
+            <td class="left">~0.75Hz</td>
+        </tr>
+        <tr>
+            <td class="left">홀짝 게임 실행</td>
+            <td>✅ 완료</td>
+            <td class="left">C 코드 → BRAM 로드</td>
         </tr>
     </table>
-    <p class="caption">[Table 11] 현재 구현 상태 요약</p>
+    <p class="caption">[표 5-1] 기능 구현 달성 여부</p>
 
     <div class="page-break"></div>
-    <div class="page-num">- 28 -</div>
+    <div class="page-num">- 21 -</div>
 
-    <h1>5. Implementation</h1>
+    <h2>5.2 합성 결과 Report</h2>
 
-    <h2>5.1 합성 결과</h2>
-
-    <p>
-        Vivado 2020.2를 사용하여 합성(Synthesis) 및 구현(Implementation)을 수행하였다.
-    </p>
+    <h3>5.2.1 Utilization Report</h3>
 
     <table>
         <tr>
@@ -310,21 +323,21 @@ create_clock -add -name sys_clk_pin -period 10.00 -waveform {0 5} [get_ports { c
         </tr>
         <tr>
             <td>LUT (Look-Up Table)</td>
-            <td>~3,500</td>
+            <td>~4,500</td>
             <td>63,400</td>
-            <td>~5.5%</td>
+            <td>~7.1%</td>
         </tr>
         <tr>
             <td>FF (Flip-Flop)</td>
-            <td>~2,000</td>
+            <td>~2,500</td>
             <td>126,800</td>
-            <td>~1.6%</td>
+            <td>~2.0%</td>
         </tr>
         <tr>
             <td>BRAM (36Kb)</td>
             <td>4</td>
             <td>135</td>
-            <td>~3%</td>
+            <td>~3.0%</td>
         </tr>
         <tr>
             <td>DSP</td>
@@ -334,37 +347,66 @@ create_clock -add -name sys_clk_pin -period 10.00 -waveform {0 5} [get_ports { c
         </tr>
         <tr>
             <td>IO</td>
-            <td>~25</td>
+            <td>50</td>
             <td>210</td>
-            <td>~12%</td>
+            <td>~23.8%</td>
         </tr>
     </table>
-    <p class="caption">[Table 12] FPGA Resource Utilization</p>
+    <p class="caption">[표 5-2] FPGA Resource Utilization</p>
 
-    <h2>5.2 데모 및 사용법</h2>
+    <h3>5.2.2 면적, 래치, 타이밍 분석</h3>
+
+    <table>
+        <tr>
+            <th>항목</th>
+            <th>상태</th>
+            <th>세부 내용</th>
+        </tr>
+        <tr>
+            <td class="left">면적 (Utilization)</td>
+            <td>✅ 양호</td>
+            <td class="left">LUT 7.1%, FF 2.0% 사용</td>
+        </tr>
+        <tr>
+            <td class="left">래치 발생 여부</td>
+            <td>✅ 없음</td>
+            <td class="left">Synthesis Report에서 Latch 미검출</td>
+        </tr>
+        <tr>
+            <td class="left">Timing Constraints</td>
+            <td>✅ 만족</td>
+            <td class="left">100MHz 클럭 제약 충족</td>
+        </tr>
+        <tr>
+            <td class="left">WNS (Worst Negative Slack)</td>
+            <td>✅ 양수</td>
+            <td class="left">>0ns (Timing Met)</td>
+        </tr>
+    </table>
+    <p class="caption">[표 5-3] 면적, 래치, 타이밍 분석</p>
+
+    <div class="page-break"></div>
+    <div class="page-num">- 22 -</div>
+
+    <h1>6. 부록</h1>
+
+    <h2>6.1 사용법 설명</h2>
 
     <ol>
         <li><strong>비트스트림 프로그래밍:</strong> Vivado에서 Generate Bitstream 후, Hardware Manager를 통해 Nexys A7 보드에 프로그래밍</li>
-        <li><strong>터미널 설정:</strong> Tera Term 실행 후, Serial Port 선택, 115200 bps / 8-N-1 설정</li>
+        <li><strong>PS2 키보드 연결:</strong> Nexys A7의 USB HID 포트에 PS2 키보드 연결</li>
+        <li><strong>VGA 모니터 연결:</strong> VGA 케이블로 모니터 연결</li>
         <li><strong>리셋:</strong> 보드의 CPU_RESET 버튼(C12)을 눌렀다 뗌</li>
-        <li><strong>동작 확인:</strong>
+        <li><strong>게임 플레이:</strong>
             <ul>
-                <li>LED[0]이 약 0.75Hz로 점멸하면 시스템 정상 동작</li>
-                <li>Switch[0] OFF: 7-Segment에 현재 명령어 표시 (예: "ADD 000")</li>
-                <li>Switch[0] ON: 7-Segment에 TX 버퍼 내용 표시</li>
+                <li>숫자 키(0-9) 입력 → 7-Segment에 숫자 표시</li>
+                <li>Backspace → 마지막 자리 삭제</li>
+                <li>Enter → 홀짝 판별 → VGA에 결과 표시</li>
             </ul>
         </li>
-        <li><strong>게임 플레이:</strong> Tera Term에서 숫자(0-9) 입력 → 홀수/짝수 결과 출력 (UART 정상 동작 시)</li>
     </ol>
 
-    <div class="page-break"></div>
-    <div class="page-num">- 29 -</div>
-
-    <h1>
-        < 부 록>
-    </h1>
-
-    <h2>1. 소스코드 목록</h2>
+    <h2>6.2 소스코드 목록</h2>
 
     <table>
         <tr>
@@ -374,97 +416,147 @@ create_clock -add -name sys_clk_pin -period 10.00 -waveform {0 5} [get_ports { c
         </tr>
         <tr>
             <td>top.v</td>
-            <td>~200</td>
-            <td>최상위 모듈, I/O 연결 및 디버그 로직</td>
+            <td>272</td>
+            <td class="left">최상위 모듈</td>
         </tr>
         <tr>
             <td>data_path.v</td>
-            <td>~370</td>
-            <td>CPU 파이프라인 코어</td>
+            <td>264</td>
+            <td class="left">CPU 파이프라인 코어</td>
+        </tr>
+        <tr>
+            <td>pipeline_registers.v</td>
+            <td>~200</td>
+            <td class="left">파이프라인 레지스터</td>
+        </tr>
+        <tr>
+            <td>mmio_controller.v</td>
+            <td>108</td>
+            <td class="left">MMIO 컨트롤러</td>
+        </tr>
+        <tr>
+            <td>pc_logic.v</td>
+            <td>~100</td>
+            <td class="left">PC 계산 로직</td>
         </tr>
         <tr>
             <td>control_unit.v</td>
-            <td>~170</td>
-            <td>제어 신호 생성</td>
+            <td>~130</td>
+            <td class="left">제어 신호 생성</td>
         </tr>
         <tr>
             <td>ALU.v</td>
             <td>~50</td>
-            <td>산술논리연산장치</td>
+            <td class="left">산술논리연산장치</td>
         </tr>
         <tr>
-            <td>ALU_op.v</td>
-            <td>~60</td>
-            <td>ALU 제어 유닛</td>
+            <td>vga_controller.v</td>
+            <td>~150</td>
+            <td class="left">VGA 타이밍</td>
         </tr>
         <tr>
-            <td>reger.v</td>
-            <td>~90</td>
-            <td>레지스터 파일</td>
+            <td>vga_text_display.v</td>
+            <td>265</td>
+            <td class="left">ODD/EVEN 렌더링</td>
         </tr>
         <tr>
-            <td>uart.v</td>
-            <td>~75</td>
-            <td>UART 통신 모듈</td>
+            <td>number_input_buffer.v</td>
+            <td>155</td>
+            <td class="left">숫자 입력 버퍼</td>
         </tr>
         <tr>
-            <td>inst_decoder.v</td>
-            <td>~470</td>
-            <td>명령어→7-Segment 디코더</td>
+            <td>ps2_kbd_top.v</td>
+            <td>~40</td>
+            <td class="left">PS2 키보드 최상위</td>
+        </tr>
+        <tr>
+            <td>ps2_kbd_new.v</td>
+            <td>~250</td>
+            <td class="left">PS2 스캔코드 디코더</td>
         </tr>
         <tr>
             <td>seven_segment_8_driver.v</td>
             <td>~75</td>
-            <td>7-Segment 드라이버</td>
-        </tr>
-        <tr>
-            <td>Forward_Unit.v</td>
-            <td>~60</td>
-            <td>Forwarding 유닛</td>
-        </tr>
-        <tr>
-            <td>Hazard_Unit_prediction.v</td>
-            <td>~40</td>
-            <td>Hazard 감지</td>
-        </tr>
-        <tr>
-            <td>imm_gen.v</td>
-            <td>~50</td>
-            <td>Immediate 생성기</td>
+            <td class="left">7-Segment 드라이버</td>
         </tr>
         <tr>
             <td>const.xdc</td>
-            <td>~60</td>
-            <td>핀 할당</td>
+            <td>102</td>
+            <td class="left">핀 할당</td>
         </tr>
         <tr>
             <td>game.coe</td>
-            <td>~2050</td>
-            <td>BRAM 초기화 데이터</td>
+            <td>~20</td>
+            <td class="left">BRAM 초기화 (게임 코드)</td>
         </tr>
         <tr>
             <td>main.c</td>
-            <td>~45</td>
-            <td>홀짝 게임 C 코드</td>
+            <td>29</td>
+            <td class="left">홀짝 게임 C 코드</td>
         </tr>
     </table>
-    <p class="caption">[Table 13] 소스코드 목록</p>
+    <p class="caption">[표 6-1] 소스코드 목록</p>
 
-    <h2>2. 개인 소감</h2>
+    <div class="page-break"></div>
+    <div class="page-num">- 23 -</div>
+
+    <h2>6.3 개발 일정</h2>
+
+    <table>
+        <tr>
+            <th>단계</th>
+            <th>기간</th>
+            <th>내용</th>
+        </tr>
+        <tr>
+            <td>문제정의</td>
+            <td>12/06 ~ 12/07</td>
+            <td class="left">프로젝트 목표, I/O 정의, 게임 로직 설계</td>
+        </tr>
+        <tr>
+            <td>개발 - CPU 코어</td>
+            <td>12/07 ~ 12/09</td>
+            <td class="left">darkriscv 분석, BRAM 연동, MMIO 설계</td>
+        </tr>
+        <tr>
+            <td>개발 - I/O</td>
+            <td>12/09 ~ 12/11</td>
+            <td class="left">PS2, VGA, Number Buffer 구현</td>
+        </tr>
+        <tr>
+            <td>구현 및 테스트</td>
+            <td>12/11 ~ 12/12</td>
+            <td class="left">합성, 보드 테스트, 디버깅</td>
+        </tr>
+        <tr>
+            <td>문서화</td>
+            <td>12/12</td>
+            <td class="left">보고서 작성</td>
+        </tr>
+    </table>
+    <p class="caption">[표 6-2] 개발 일정</p>
+
+    <h2>6.4 개인 소감</h2>
 
     <p>
-        본 프로젝트를 통해 RISC-V 아키텍처의 파이프라인 구조와 Hazard 처리 기법에 대해 깊이 이해할 수 있었다. 특히, 오픈소스 CPU 코어를 실제 FPGA 보드에 통합하고 I/O를 연결하는
-        과정에서 Memory-Mapped I/O의 개념과 주소 디코딩의 중요성을 체감하였다.
+        본 프로젝트를 통해 RISC-V 아키텍처의 파이프라인 구조와 Hazard 처리 기법에 대해 깊이 이해할 수 있었다.
+        특히, 오픈소스 CPU 코어(darkriscv)를 실제 FPGA 보드에 통합하고 다양한 I/O 장치(PS2 키보드, VGA 모니터)를
+        연결하는 과정에서 Memory-Mapped I/O의 개념과 주소 디코딩의 중요성을 체감하였다.
     </p>
 
     <p>
-        개발 과정에서 발생한 Memory Aliasing 버그는 주소 비트 절삭이라는 매우 미묘한 원인에서 비롯되었으며, 이를 RTL 레벨에서 분석하고 해결하는 경험을 통해 하드웨어 디버깅 능력이 크게
-        향상되었다. UART 통신 문제가 완전히 해결되지 않은 점은 아쉬우나, 하드웨어 디버거(7-Segment TX 모니터링)를 구현하여 UART 없이도 CPU의 동작을 검증할 수 있는 대안을 마련하였다.
+        개발 과정에서 가장 어려웠던 부분은 PS2 키보드 입력과 VGA 출력을 동시에 CPU와 연동하는 것이었다.
+        각 장치가 서로 다른 타이밍과 프로토콜을 사용하기 때문에, MMIO 주소를 신중하게 설계하고
+        각 모듈 간의 신호 연결을 철저히 검증해야 했다. 특히 VGA 텍스트 표시를 위해 ROM 기반 폰트 대신
+        하드코딩된 비트맵 패턴을 사용한 것은 리소스 효율성과 구현 단순성 사이의 트레이드오프를 고민한 결과였다.
     </p>
 
     <p>
-        이번 프로젝트는 컴퓨터 구조 수업에서 배운 이론적 지식을 실제 하드웨어로 구현해보는 소중한 경험이었다. 단순히 코드를 작성하는 것이 아니라, 타이밍, 리소스, 물리적 제약 등 하드웨어 특유의
-        고려사항들을 다루면서 임베디드 시스템 개발자로서의 역량을 기를 수 있었다.
+        이번 프로젝트는 컴퓨터 구조 수업에서 배운 이론적 지식을 실제 하드웨어로 구현해보는 소중한 경험이었다.
+        단순히 코드를 작성하는 것이 아니라, 타이밍, 리소스, 물리적 제약 등 하드웨어 특유의 고려사항들을 다루면서
+        임베디드 시스템 개발자로서의 역량을 기를 수 있었다. 또한, 생성형 AI(Claude)를 활용하여 코드 작성과
+        디버깅을 효율적으로 수행할 수 있었는데, AI가 제안한 코드를 그대로 사용하기보다는
+        직접 검토하고 프로젝트에 맞게 수정하는 과정이 중요함을 깨달았다.
     </p>
 
     <hr style="margin: 40px 0;">

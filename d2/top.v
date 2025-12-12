@@ -54,13 +54,6 @@ module top(
     wire [31:0] inst_out, PC;
     wire [15:0] led_reg;
     
-    // UART 관련 (기존 호환용, 미사용)
-    wire [7:0] tx_data;
-    wire tx_we, rx_re;
-    wire [7:0] rx_data = 8'h00;
-    wire rx_valid = 1'b0;
-    wire tx_busy = 1'b0;
-    
     // PS2 키보드 신호
     wire [7:0] ps2_scancode;
     wire ps2_released;
@@ -114,13 +107,6 @@ module top(
         .alu_out_ext(alu_out),
         .data_mem_out_ext(data_mem_out),
         .led_reg_out(led_reg),
-        // UART (미사용, 호환용)
-        .uart_tx_data_out(tx_data),
-        .uart_tx_we_out(tx_we),
-        .uart_rx_re_out(rx_re),
-        .uart_rx_data_in(rx_data),
-        .uart_rx_valid_in(rx_valid),
-        .uart_tx_busy_in(tx_busy),
         // PS2 Keyboard (새로 추가)
         .ps2_scancode_in(ps2_scancode),
         .ps2_key_pressed_in(ps2_key_pressed),

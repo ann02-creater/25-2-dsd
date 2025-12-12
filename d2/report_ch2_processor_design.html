@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <title>2. 설계 - RISC-V Pipeline Processor</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            font-size: 11pt;
+            line-height: 1.8;
+            max-width: 210mm;
+            margin: 0 auto;
+            padding: 20mm;
+        }
+
+        h1 {
+            font-size: 18pt;
+            margin: 30px 0 20px;
+            border-bottom: 2px solid #000;
+            padding-bottom: 10px;
+        }
+
+        h2 {
+            font-size: 14pt;
+            margin: 25px 0 15px;
+        }
+
+        h3 {
+            font-size: 12pt;
+            margin: 20px 0 10px;
+        }
+
+        h4 {
+            font-size: 11pt;
+            margin: 15px 0 8px;
+            font-weight: bold;
+        }
+
+        p {
+            margin: 10px 0;
+            text-align: justify;
+            text-indent: 1em;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 10pt;
+        }
+
+        th,
+        td {
+            border: 1px solid #000;
+            padding: 8px;
+            text-align: center;
+        }
+
+        th {
+            background: #f0f0f0;
+        }
+
+        .caption {
+            text-align: center;
+            font-size: 10pt;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+
+        .diagram {
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .diagram pre {
+            font-size: 9pt;
+            line-height: 1.3;
+            margin: 0;
+        }
+
+        pre {
+            background: #f5f5f5;
+            padding: 15px;
+            font-size: 9pt;
+            line-height: 1.4;
+            overflow-x: auto;
+            border: 1px solid #ddd;
+        }
+
+        ul,
+        ol {
+            margin: 15px 0 15px 30px;
+        }
+
+        li {
+            margin: 8px 0;
+        }
+
+        .page-num {
+            text-align: center;
+            font-size: 10pt;
+            margin: 30px 0;
+            color: #666;
+        }
+
+        .highlight {
+            background: #fff3cd;
+            padding: 15px;
+            border-left: 4px solid #ffc107;
+            margin: 20px 0;
+        }
+
+        @media print {
+            .page-break {
+                page-break-before: always;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="page-num">- 8 -</div>
+
+    <h1>2. 설계</h1>
+
+    <h2>2.1 Top-Module</h2>
+
+    <p>
+        <code>top.v</code>는 시스템의 최상위 모듈로, CPU 코어, I/O 컨트롤러, 디스플레이 모듈들을 통합한다.
+    </p>
+
+    <h3>2.1.1 Top Module 포트 인터페이스</h3>
+
+    <table>
+        <tr>
+            <th>방향</th>
+            <th>포트명</th>
+            <th>너비</th>
+            <th>설명</th>
+        </tr>
+        <tr>
+            <td>Input</td>
+            <td>clk</td>
+            <td>1</td>
+            <td>100MHz 시스템 클럭</td>
+        </tr>
+        <tr>
+            <td>Input</td>
+            <td>rst</td>
+            <td>1</td>
+            <td>Active-Low 리셋</td>
+        </tr>
+        <tr>
+            <td>Input</td>
+            <td>switch_0</td>
+            <td>1</td>
+            <td>디버그 모드 선택</td>
+        </tr>
+        <tr>
+            <td>Input</td>
+            <td>ps2_clk, ps2_data</td>
+            <td>1, 1</td>
+            <td>PS2 키보드 인터페이스</td>
+        </tr>
+        <tr>
+            <td>Output</td>
+            <td>vga_hsync, vga_vsync</td>
+            <td>1, 1</td>
+            <td>VGA 동기화 신호</td>
+        </tr>
+        <tr>
+            <td>Output</td>
+            <td>vga_r, vga_g, vga_b</td>
+            <td>4, 4, 4</td>
+            <td>VGA RGB 색상</td>
+        </tr>
+        <tr>
+            <td>Output</td>
+            <td>seg_out</td>
+            <td>7</td>
+            <td>7-Segment Cathode</td>
+        </tr>
+        <tr>
+            <td>Output</td>
+            <td>seg_sel</td>
+            <td>8</td>
+            <td>7-Segment Anode (8자리)</td>
+        </tr>
+        <tr>
+            <td>Output</td>
+            <td>led_heartbeat</td>
+            <td>1</td>
+            <td>시스템 동작 LED</td>
+        </tr>
+        <tr>
+            <td>Output</td>
+            <td>led</td>
+            <td>16</td>
+            <td>결과 LED</td>
+        </tr>
+    </table>
+    <p class="caption">[표 2-1] Top Module 포트 정의</p>
+
+    <div class="page-break"></div>
+    <div class="page-num">- 9 -</div>
+
+    <h3>2.1.2 Top Module 블록도</h3>
+
+    <div class="diagram">
+        <pre>
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                                    top.v                                         │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│     ┌───────────────┐              ┌──────────────────────┐                     │
+│     │  ps2_kbd_top  │──scancode───>│                      │                     │
+│     │ (PS2 Decoder) │──key_pressed─│      data_path       │                     │
+│     └───────────────┘              │     (CPU Core)       │                     │
+│                                    │                      │                     │
+│     ┌───────────────┐──number─────>│  - pipeline_regs     │                     │
+│     │number_input   │──valid──────>│  - mmio_controller   │                     │
+│     │   _buffer     │              │  - pc_logic          │                     │
+│     │ (숫자 입력)    │<─digit[0:7]─ │  - BRAM (blk_mem)    │                     │
+│     └───────────────┘              │  - ALU, RegFile      │                     │
+│                                    └──────────┬───────────┘                     │
+│                                               │                                  │
+│           ┌───────────────────────────────────┴─────────────────────┐           │
+│           │                           │                             │           │
+│           ▼                           ▼                             ▼           │
+│   ┌───────────────┐          ┌───────────────┐            ┌───────────────┐    │
+│   │vga_controller │          │  7seg_driver  │            │   LED[15:0]   │    │
+│   │  + vga_text   │          │   (8-digit)   │            │               │    │
+│   │   _display    │          │               │            │               │    │
+│   └───────┬───────┘          └───────┬───────┘            └───────┬───────┘    │
+│           │                          │                            │            │
+│           ▼                          ▼                            ▼            │
+│   ┌───────────────┐          ┌───────────────┐            ┌───────────────┐    │
+│   │  VGA Monitor  │          │   7-Segment   │            │     LEDs      │    │
+│   │  "ODD"/"EVEN" │          │  입력 숫자     │            │   Heartbeat   │    │
+│   └───────────────┘          └───────────────┘            └───────────────┘    │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+</pre>
+    </div>
+    <p class="caption">[그림 2-1] Top Module 블록도</p>
+
+    <div class="page-break"></div>
+    <div class="page-num">- 10 -</div>
+
+    <h2>2.2 Algorithm (5-Stage Pipeline)</h2>
+
+    <h3>2.2.1 파이프라인 구조</h3>
+
+    <p>
+        본 프로세서는 전형적인 5단계 파이프라인 구조를 채택하였다.
+    </p>
+
+    <table>
+        <tr>
+            <th>Stage</th>
+            <th>Name</th>
+            <th>주요 동작</th>
+            <th>사용 하드웨어</th>
+        </tr>
+        <tr>
+            <td><strong>IF</strong></td>
+            <td>Instruction Fetch</td>
+            <td>PC 주소에서 명령어 읽기</td>
+            <td>PC, BRAM Port A</td>
+        </tr>
+        <tr>
+            <td><strong>ID</strong></td>
+            <td>Instruction Decode</td>
+            <td>명령어 해석, 레지스터 읽기</td>
+            <td>Control Unit, RegFile, Imm Gen</td>
+        </tr>
+        <tr>
+            <td><strong>EX</strong></td>
+            <td>Execution</td>
+            <td>ALU 연산, 분기 주소 계산</td>
+            <td>ALU, Branch Comparator</td>
+        </tr>
+        <tr>
+            <td><strong>MEM</strong></td>
+            <td>Memory Access</td>
+            <td>Load/Store, MMIO 접근</td>
+            <td>BRAM Port B, MMIO Controller</td>
+        </tr>
+        <tr>
+            <td><strong>WB</strong></td>
+            <td>Write Back</td>
+            <td>결과를 레지스터에 기록</td>
+            <td>RegFile Write Port</td>
+        </tr>
+    </table>
+    <p class="caption">[표 2-2] 5-Stage Pipeline</p>
+
+    <h3>2.2.2 파이프라인 타이밍</h3>
+
+    <div class="diagram">
+        <pre>
+Cycle     │  1  │  2  │  3  │  4  │  5  │  6  │  7  │  8  │
+──────────┼─────┼─────┼─────┼─────┼─────┼─────┼─────┼─────┤
+Inst 1    │ IF  │ ID  │ EX  │ MEM │ WB  │     │     │     │
+Inst 2    │     │ IF  │ ID  │ EX  │ MEM │ WB  │     │     │
+Inst 3    │     │     │ IF  │ ID  │ EX  │ MEM │ WB  │     │
+Inst 4    │     │     │     │ IF  │ ID  │ EX  │ MEM │ WB  │
+</pre>
+    </div>
+    <p class="caption">[그림 2-2] 파이프라인 타이밍</p>
+
+    <h3>2.2.3 Hazard 처리</h3>
+
+    <h4>Data Hazard: Forwarding</h4>
+    <p>
+        EX/MEM 또는 MEM/WB 단계의 결과를 ID/EX 단계로 바이패스하여 Stall을 최소화한다.
+    </p>
+
+    <h4>Control Hazard: Static Branch Prediction (Not Taken)</h4>
+    <p>
+        분기가 발생하지 않는다고 가정하고 PC+4를 fetch. 분기 발생 시 파이프라인 flush.
+    </p>
+
+    <h4>Load-Use Hazard: Stall</h4>
+    <p>
+        Load 직후 해당 값을 사용하는 경우 1 cycle stall.
+    </p>
+
+    <div class="page-break"></div>
+    <div class="page-num">- 11 -</div>
+
+    <h2>2.3 Datapath</h2>
+
+    <h3>2.3.1 Datapath 블록도</h3>
+
+    <div class="diagram">
+        <pre>
+                                5-Stage RISC-V Pipeline Datapath
+     ┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
+     │   IF Stage      │      │   ID Stage      │      │   EX Stage      │
+     │  ┌──────────┐   │      │  ┌──────────┐   │      │  ┌──────────┐   │
+     │  │    PC    │───┼──┐   │  │  Control │   │      │  │   ALU    │   │
+     │  └──────────┘   │  │   │  │   Unit   │   │      │  │          │   │
+     │       │         │  │   │  └──────────┘   │      │  └──────────┘   │
+     │       ▼         │  │   │       │         │      │       │         │
+     │  ┌──────────┐   │  │   │  ┌──────────┐   │      │       ▼         │
+     │  │   BRAM   │   │  │   │  │ Register │   │      │  ┌──────────┐   │
+     │  │  Port A  │   │  │   │  │   File   │   │      │  │  Branch  │   │
+     │  │ (Instr)  │   │  │   │  └──────────┘   │      │  │  Compare │   │
+     │  └──────────┘   │  │   │       │         │      │  └──────────┘   │
+     │       │         │  │   │  ┌──────────┐   │      │                 │
+     │       ▼         │  │   │  │  Imm Gen │   │      │                 │
+     └───────┼─────────┘  │   │  └──────────┘   │      └─────────────────┘
+             │            │   └────────┼────────┘
+             ▼            │            ▼
+        ┌────────┐        │       ┌────────┐              ┌────────┐
+        │ IF/ID  │────────┼──────▶│ ID/EX  │─────────────▶│ EX/MEM │
+        │  Reg   │        │       │  Reg   │              │  Reg   │
+        └────────┘        │       └────────┘              └────────┘
+                          │              │                     │
+     ┌────────────────────┴──────────────┴─────────────────────┘
+     │                    Forwarding Unit
+     └──────────────────────────────────────────────────────────▶
+</pre>
+    </div>
+    <p class="caption">[그림 2-3] Datapath 블록도 (일부)</p>
+
+    <h3>2.3.2 모듈화 구조</h3>
+
+    <p>
+        <code>data_path.v</code>는 가독성과 유지보수성을 위해 다음과 같이 모듈화되어 있다:
+    </p>
+
+    <table>
+        <tr>
+            <th>모듈명</th>
+            <th>파일명</th>
+            <th>기능</th>
+        </tr>
+        <tr>
+            <td>pipeline_registers</td>
+            <td>pipeline_registers.v</td>
+            <td>IF/ID, ID/EX, EX/MEM, MEM/WB 레지스터</td>
+        </tr>
+        <tr>
+            <td>mmio_controller</td>
+            <td>mmio_controller.v</td>
+            <td>MMIO Read/Write 처리</td>
+        </tr>
+        <tr>
+            <td>pc_logic</td>
+            <td>pc_logic.v</td>
+            <td>PC 계산, 분기 처리</td>
+        </tr>
+    </table>
+    <p class="caption">[표 2-3] data_path.v 하위 모듈</p>
+
+    <div class="page-break"></div>
+    <div class="page-num">- 12 -</div>
+
+    <h2>2.4 Controller</h2>
+
+    <h3>2.4.1 Control Unit 출력 신호</h3>
+
+    <table>
+        <tr>
+            <th>신호명</th>
+            <th>너비</th>
+            <th>설명</th>
+        </tr>
+        <tr>
+            <td>can_branch</td>
+            <td>1</td>
+            <td>분기 명령어 여부</td>
+        </tr>
+        <tr>
+            <td>mem_read</td>
+            <td>1</td>
+            <td>메모리 읽기 (Load)</td>
+        </tr>
+        <tr>
+            <td>mem_to_reg</td>
+            <td>1</td>
+            <td>WB 데이터 소스 선택</td>
+        </tr>
+        <tr>
+            <td>mem_write</td>
+            <td>1</td>
+            <td>메모리 쓰기 (Store)</td>
+        </tr>
+        <tr>
+            <td>alu_src</td>
+            <td>1</td>
+            <td>ALU 입력 B 소스 선택</td>
+        </tr>
+        <tr>
+            <td>reg_write</td>
+            <td>1</td>
+            <td>레지스터 쓰기 여부</td>
+        </tr>
+        <tr>
+            <td>alu_op</td>
+            <td>2</td>
+            <td>ALU 연산 타입</td>
+        </tr>
+        <tr>
+            <td>rd_sel</td>
+            <td>2</td>
+            <td>Write Data 소스 선택</td>
+        </tr>
+        <tr>
+            <td>pc_gen_sel</td>
+            <td>1</td>
+            <td>Branch 주소 계산 방식</td>
+        </tr>
+    </table>
+    <p class="caption">[표 2-4] Controller 출력 신호</p>
+
+    <h3>2.4.2 Opcode별 제어 신호</h3>
+
+    <table>
+        <tr>
+            <th>Opcode</th>
+            <th>Type</th>
+            <th>RegWrite</th>
+            <th>MemRead</th>
+            <th>MemWrite</th>
+            <th>ALUSrc</th>
+            <th>ALUOp</th>
+        </tr>
+        <tr>
+            <td>0110011</td>
+            <td>R-type</td>
+            <td>1</td>
+            <td>0</td>
+            <td>0</td>
+            <td>0</td>
+            <td>10</td>
+        </tr>
+        <tr>
+            <td>0010011</td>
+            <td>I-type</td>
+            <td>1</td>
+            <td>0</td>
+            <td>0</td>
+            <td>1</td>
+            <td>11</td>
+        </tr>
+        <tr>
+            <td>0000011</td>
+            <td>Load</td>
+            <td>1</td>
+            <td>1</td>
+            <td>0</td>
+            <td>1</td>
+            <td>00</td>
+        </tr>
+        <tr>
+            <td>0100011</td>
+            <td>Store</td>
+            <td>0</td>
+            <td>0</td>
+            <td>1</td>
+            <td>1</td>
+            <td>00</td>
+        </tr>
+        <tr>
+            <td>1100011</td>
+            <td>Branch</td>
+            <td>0</td>
+            <td>0</td>
+            <td>0</td>
+            <td>0</td>
+            <td>01</td>
+        </tr>
+        <tr>
+            <td>1101111</td>
+            <td>JAL</td>
+            <td>1</td>
+            <td>0</td>
+            <td>0</td>
+            <td>X</td>
+            <td>XX</td>
+        </tr>
+    </table>
+    <p class="caption">[표 2-5] Opcode별 제어 신호</p>
+
+    <div class="page-break"></div>
+    <div class="page-num">- 13 -</div>
+
+    <h2>2.5 기타 (I/O Modules)</h2>
+
+    <h3>2.5.1 PS2 Keyboard Controller</h3>
+
+    <p>
+        PS2 키보드 프로토콜을 디코딩하여 ASCII 기반 스캔코드로 변환한다.
+    </p>
+
+    <table>
+        <tr>
+            <th>모듈</th>
+            <th>파일</th>
+            <th>기능</th>
+        </tr>
+        <tr>
+            <td>ps2_kbd_top</td>
+            <td>ps2_kbd_top.v</td>
+            <td>PS2 최상위 모듈</td>
+        </tr>
+        <tr>
+            <td>ps2_kbd_new</td>
+            <td>ps2_kbd_new.v</td>
+            <td>스캔코드 디코딩</td>
+        </tr>
+        <tr>
+            <td>ps2_debounce_pulse</td>
+            <td>ps2_debounce_pulse.v</td>
+            <td>디바운싱 및 펄스 생성</td>
+        </tr>
+    </table>
+    <p class="caption">[표 2-6] PS2 Keyboard 모듈</p>
+
+    <h3>2.5.2 Number Input Buffer</h3>
+
+    <p>
+        숫자 키 입력을 누적하여 정수값으로 변환하고, Enter 키 입력 시 CPU에 전달한다.
+    </p>
+
+    <ul>
+        <li><strong>숫자 키 (0-9):</strong> number = number × 10 + digit</li>
+        <li><strong>Backspace:</strong> number = number / 10</li>
+        <li><strong>Enter:</strong> number_valid = 1, CPU가 읽을 수 있음</li>
+        <li><strong>BCD 변환:</strong> Double Dabble 알고리즘으로 7-Segment 출력</li>
+    </ul>
+
+    <h3>2.5.3 VGA Controller</h3>
+
+    <p>
+        640×480 @ 60Hz VGA 타이밍을 생성하고, 화면 중앙에 "ODD" 또는 "EVEN"을 표시한다.
+    </p>
+
+    <table>
+        <tr>
+            <th>모듈</th>
+            <th>파일</th>
+            <th>기능</th>
+        </tr>
+        <tr>
+            <td>vga_controller</td>
+            <td>vga_controller.v</td>
+            <td>HSYNC, VSYNC, pixel 좌표 생성</td>
+        </tr>
+        <tr>
+            <td>vga_text_display</td>
+            <td>vga_text_display.v</td>
+            <td>ODD/EVEN 텍스트 렌더링</td>
+        </tr>
+    </table>
+    <p class="caption">[표 2-7] VGA 모듈</p>
+
+    <h3>2.5.4 7-Segment Display Driver</h3>
+
+    <p>
+        8자리 7-Segment를 약 190Hz로 시분할 멀티플렉싱하여 구동한다.
+        입력 중인 숫자를 실시간으로 표시하며, Leading Zero는 자동 생략된다.
+    </p>
+
+</body>
+
+</html>
