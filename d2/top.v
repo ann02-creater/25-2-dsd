@@ -6,6 +6,7 @@
 //
 // Description:
 //   최상위 모듈. RISC-V CPU 코어와 I/O 장치들을 통합.
+//   100MHz 클럭 사용 (프로젝트 제한 조건)
 //   
 // I/O 구성:
 //   - PS2 키보드: 숫자 입력 (0-9, Enter, Backspace)
@@ -15,7 +16,7 @@
 //   - LED[15:1]: 결과 표시 (홀수=ON, 짝수=OFF)
 //
 // Change History:
-//   2024.12.12 - 100MHz 클럭 사용 (프로젝트 제한 조건)
+//   2024.12.12 - 100MHz 클럭 유지
 //////////////////////////////////////////////////////////////////////////////////
 
 module top(
@@ -79,7 +80,7 @@ module top(
     wire [31:0] data_read_1, data_read_2, write_data, imm_out, shift, alu_mux, alu_out, data_mem_out;
     
     // =========================================================================
-    // CPU Core (data_path)
+    // CPU Core (data_path) - 100MHz
     // =========================================================================
     data_path dp(
         .clk(clk),
@@ -118,7 +119,7 @@ module top(
     );
     
     // =========================================================================
-    // PS2 Keyboard Controller
+    // PS2 Keyboard Controller - 100MHz
     // =========================================================================
     ps2_kbd_top ps2_kbd(
         .clk(clk),
@@ -132,7 +133,7 @@ module top(
     );
     
     // =========================================================================
-    // Number Input Buffer
+    // Number Input Buffer - 100MHz
     // =========================================================================
     number_input_buffer num_buf(
         .clk(clk),
@@ -153,7 +154,7 @@ module top(
     );
     
     // =========================================================================
-    // VGA Controller
+    // VGA Controller - 100MHz
     // =========================================================================
     vga_controller vga_ctrl(
         .clk(clk),
@@ -224,7 +225,7 @@ module top(
     wire [6:0] s1 = (digit7 == 0 && digit6 == 0 && digit5 == 0 && digit4 == 0 && digit3 == 0 && digit2 == 0 && digit1 == 0) ? 7'b1111111 : seg1_pattern;
     wire [6:0] s0 = seg0_pattern;  // 일의 자리는 항상 표시
     
-    // 7-Segment Driver
+    // 7-Segment Driver - 100MHz
     seven_segment_8_driver seg_driver(
         .clk(clk),
         .rst(!rst),
@@ -241,7 +242,7 @@ module top(
     );
     
     // =========================================================================
-    // Heartbeat LED (시스템 동작 확인)
+    // Heartbeat LED (시스템 동작 확인) - 100MHz
     // =========================================================================
     reg [25:0] heartbeat_counter;
     
