@@ -302,46 +302,6 @@ module riscv_top
     assign XATAIMUX[3] = 32'hdeadbeef;
     assign XDACKMUX[3] = DTACK3==1;
 
-`ifdef SPI
-`ifndef SPIBB
-    assign spi_sck = spihw_sck;
-    assign spi_csn = spihw_csn;
-    assign spihw_miso = spi_miso;
-`else
-    wire spibb_csn;   // SPI CSN output (active LOW)
-    wire spibb_sck;   // SPI clock output
-    wire spibb_mosi;  // SPI master data output, slave data input
-    wire spibb_miso;  // SPI master data input, slave data output
-    wire spibb_ena = oport[3];
-    assign spi_sck = spibb_ena ? spibb_sck : spihw_sck;
-    assign spi_csn = spibb_ena ? spibb_csn : spihw_csn;
-    assign spihw_miso = spi_miso;
-    assign spibb_miso = spi_miso;
-    spi_master_bb spi_master_bb0(
-        .CLK(CLK),
-        .RES(RES),
-        .IPORT(iport),
-        .OPORT(oport),
-        .CSN(spibb_csn),
-        .SCK(spibb_sck),
-        .MOSI(SPI_MOSI),
-        .MISO(SPI_MISO)
-    );
-`endif
-`ifdef SIMULATION
-    wire [15:0] out_x_resp;
-    assign out_x_resp = oport[31:16];
-    lis3dh_stub lis3dh_stub0 (
-        .out_x_resp(out_x_resp),
-        .clk(CLK),
-        .sck(spi_sck),
-        .csn(spi_csn),
-        .mosi(SPI_MOSI),
-        .miso(SPI_MISO)
-    );
-`endif
-`endif
-
     // assign DEBUG = KDEBUG; // Removed
 
     // 7-Segment Controller Instantiation
